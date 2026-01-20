@@ -1,0 +1,51 @@
+
+// Godown (Warehouse) Models
+model Godown {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  location    String?
+  
+  // Hierarchy Support
+  parentId    String?
+  parent      Godown?  @relation("GodownHierarchy", fields: [parentId], references: [id])
+  children    Godown[] @relation("GodownHierarchy")
+  
+  stockMovements StockMovement[]
+  voucherItems   VoucherItem[]
+  transfersFrom  StockTransfer[] @relation("FromGodown")
+  transfersTo    StockTransfer[] @relation("ToGodown")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model StockTransfer {
+  id              String   @id @default(cuid())
+  transferNumber  String   @unique
+  date            DateTime
+  
+  fromGodownId    String
+  fromGodown      Godown   @relation("FromGodown", fields: [fromGodownId], references: [id])
+  
+  toGodownId      String
+  toGodown        Godown   @relation("ToGodown", fields: [toGodownId], references: [id])
+  
+  items           StockTransferItem[]
+  status          String   @default("PENDING") // PENDING, COMPLETED
+  
+  createdBy       String
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+}
+
+model StockTransferItem {
+  id              String   @id @default(cuid())
+  transferId      String
+  transfer        StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  
+  itemId          String
+  item            InventoryItem @relation("TransferItems", fields: [itemId], references: [id])
+  
+  quantity        Float
+  batchNumber     String?
+}

@@ -1,0 +1,181 @@
+
+// ============================================
+// PHASE 3: INVENTORY & MANUFACTURING MODELS
+// ============================================
+
+model StockGroup {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  
+  // Hierarchy
+  parentId    String?
+  parent      StockGroup? @relation("StockGroupHierarchy", fields: [parentId], references: [id])
+  children    StockGroup[] @relation("StockGroupHierarchy")
+  
+  items       InventoryItem[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model UnitOfMeasure {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  symbol         String
+  decimalPlaces  Int      @default(2)
+  
+  items          InventoryItem[]
+  createdAt      DateTime @default(now())
+}
+
+model BatchTracking {
+  id              String   @id @default(cuid())
+  batchNumber     String
+  itemId          String
+  item            InventoryItem @relation(fields: [itemId], references: [id])
+  
+  manufacturingDate DateTime?
+  expiryDate        DateTime?
+  quantity          Float
+  
+  createdAt       DateTime @default(now())
+  
+  @@unique([itemId, batchNumber])
+}
+
+model SerialNumber {
+  id              String   @id @default(cuid())
+  serialNumber    String   @unique
+  itemId          String
+  item            InventoryItem @relation(fields: [itemId], references: [id])
+  
+  status          String   // Available, Sold, Defective
+  
+  createdAt       DateTime @default(now())
+}
+
+model BillOfMaterial {
+  id              String   @id @default(cuid())
+  name            String
+  finishedItemId  String
+  finishedItem    InventoryItem @relation("FinishedItem", fields: [finishedItemId], references: [id])
+  
+  components      BOMComponent[]
+  manufacturingJournals ManufacturingJournal[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model BOMComponent {
+  id              String   @id @default(cuid())
+  bomId           String
+  bom             BillOfMaterial @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  
+  itemId          String
+  item            InventoryItem @relation("BOMComponentItem", fields: [itemId], references: [id])
+  
+  quantity        Float
+  wastagePercent  Float    @default(0)
+}
+
+model ManufacturingJournal {
+  id              String   @id @default(cuid())
+  journalNumber   String   @unique
+  date            DateTime
+  bomId           String
+  bom             BillOfMaterial @relation(fields: [bomId], references: [id])
+  
+  voucherId       String
+  voucher         Voucher  @relation(fields: [voucherId], references: [id])
+  
+  quantityProduced Float
+  totalCost        Float
+  
+  createdAt       DateTime @default(now())
+}
+
+// ============================================
+// PHASE 4: ADVANCED FEATURES MODELS
+// ============================================
+
+model Currency {
+  id              String   @id @default(cuid())
+  code            String   @unique // USD, EUR, GBP
+  name            String
+  symbol          String
+  
+  exchangeRates   ExchangeRate[]
+  createdAt       DateTime @default(now())
+}
+
+model ExchangeRate {
+  id              String   @id @default(cuid())
+  currencyId      String
+  currency        Currency @relation(fields: [currencyId], references: [id])
+  
+  date            DateTime
+  rate            Float    // 1 Foreign Currency = X INR
+  
+  createdAt       DateTime @default(now())
+  
+  @@unique([currencyId, date])
+}
+
+model Employee {
+  id              String   @id @default(cuid())
+  employeeCode    String   @unique
+  name            String
+  email           String?
+  phone           String?
+  
+  designation     String?
+  department      String?
+  dateOfJoining   DateTime
+  
+  salaryStructureId String?
+  salaryStructure   SalaryStructure? @relation(fields: [salaryStructureId], references: [id])
+  
+  salarySlips     SalarySlip[]
+  
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model SalaryStructure {
+  id              String   @id @default(cuid())
+  name            String
+  
+  basicSalary     Float
+  hra             Float    @default(0)
+  conveyance      Float    @default(0)
+  medicalAllowance Float   @default(0)
+  otherAllowances Float    @default(0)
+  
+  pf              Float    @default(0)
+  esi             Float    @default(0)
+  professionalTax Float    @default(0)
+  
+  employees       Employee[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model EWayBill {
+  id              String   @id @default(cuid())
+  ewayBillNumber  String   @unique
+  voucherId       String
+  voucher         Voucher  @relation(fields: [voucherId], references: [id])
+  
+  transporterId   String?
+  vehicleNumber   String?
+  distance        Float?
+  
+  generatedDate   DateTime
+  validUntil      DateTime
+  
+  status          String   // Generated, Cancelled
+  
+  createdAt       DateTime @default(now())
+}

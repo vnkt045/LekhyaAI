@@ -1,0 +1,25 @@
+model Voucher {
+  id            String   @id @default(cuid())
+  voucherNumber String   @unique
+  voucherType   String   // Payment, Receipt, Contra, Journal, Sales, Purchase
+  date          DateTime
+  
+  totalDebit    Float
+  totalCredit   Float
+  narration     String
+  
+  // Relations
+  entries       VoucherEntry[]
+  gstDetails    GSTDetails?
+  attachments   Attachment[]
+  aiInsights    AIInsight[]  @relation("VoucherInsights")
+  stockMovements StockMovement[]
+  salarySlips    SalarySlip[]
+  
+  createdBy     String   // User ID placeholder
+  isPosted      Boolean  @default(false)
+  isImmutable   Boolean  @default(false)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt // Added for tracking
+}

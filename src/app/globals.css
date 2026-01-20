@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* LekhyaAI Brand Colors */
+  --color-lekhya-dark: #0A1929;
+  /* Navy - Deep navy blue for headers */
+  --color-lekhya-base: #F8FAFC;
+  /* Slate 50 - Light background */
+  --color-lekhya-primary: #0A1929;
+  /* Navy - Primary brand color */
+  --color-lekhya-accent: #FF6B35;
+  /* Orange - Vibrant orange accent */
+  --color-lekhya-text: #334155;
+  /* Slate 700 - Text color */
+  --color-lekhya-white: #FFFFFF;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+
+  /* Lekhya Utility Classes */
+  /* Mandatory Field Indicator - CA Standard */
+  .required-label::after {
+    content: " *";
+    color: #ef4444;
+    /* red-500 */
+    margin-left: 2px;
+  }
+
+
+  .lekhya-header {
+    @apply bg-lekhya-dark text-white h-12 flex items-center justify-between px-4 shadow-sm border-b-[3px] border-lekhya-accent;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 bg-slate-50 border border-lekhya-accent rounded-lg focus:ring-2 focus:ring-lekhya-accent focus:border-lekhya-accent outline-none transition-all placeholder:text-slate-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-50/10 font-medium text-slate-700;
+  }
+
+  .gateway-container {
+    @apply flex h-[calc(100vh-3rem)] overflow-hidden bg-lekhya-base;
+  }
+
+  .gateway-menu {
+    @apply w-[300px] bg-white border-r border-[#E2E8F0] shadow-md flex flex-col;
+  }
+
+  .gateway-title {
+    @apply bg-lekhya-dark text-white py-2 px-4 text-center font-bold uppercase tracking-wider text-sm border-b border-lekhya-accent;
+  }
+
+  .gateway-list {
+    @apply py-2 overflow-y-auto flex-1;
+  }
+
+  .gateway-item {
+    @apply flex items-center justify-between px-4 py-1.5 text-sm font-medium text-lekhya-text hover:bg-lekhya-accent/10 hover:text-indigo-900 cursor-pointer transition-colors border-l-4 border-transparent hover:border-lekhya-accent;
+  }
+
+  .gateway-item-active {
+    @apply bg-lekhya-accent/10 text-indigo-900 border-l-4 border-lekhya-accent;
+  }
+
+  .hotkey {
+    @apply text-lekhya-accent font-bold mr-1;
+  }
+
+  .lekhya-card {
+    @apply bg-white border border-[#E2E8F0] shadow-sm rounded-sm;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 bg-slate-50 border border-lekhya-accent rounded-lg focus:ring-2 focus:ring-lekhya-accent focus:border-lekhya-accent outline-none transition-all placeholder:text-slate-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-50/10 font-medium text-slate-700;
+  }
+
+  .lekhya-input {
+    @apply h-8 px-2 text-sm border-b border-lekhya-accent bg-slate-50 focus:outline-none focus:border-lekhya-accent focus:bg-lekhya-accent/10 w-full transition-colors rounded-none font-medium text-slate-700;
+  }
+
+  .info-panel {
+    @apply bg-lekhya-base border-t border-[#E2E8F0] p-2 text-xs flex justify-between items-center text-lekhya-text;
+  }
+
+  .shortcut-bar {
+    @apply w-[80px] bg-lekhya-dark text-white flex flex-col border-l border-white/10;
+  }
+
+  .shortcut-btn {
+    @apply px-2 py-3 text-xs text-center border-b border-white/10 hover:bg-lekhya-accent hover:text-white transition-colors cursor-pointer;
+  }
+}

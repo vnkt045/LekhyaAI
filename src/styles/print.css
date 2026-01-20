@@ -1,0 +1,39 @@
+@media print {
+    @page {
+        size: A4;
+        margin: 0;
+    }
+
+    body {
+        background: white;
+        font-size: 12pt;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Hide navigation, transparency, and non-printable elements */
+    header,
+    nav,
+    .no-print,
+    button,
+    .sticky-header {
+        display: none !important;
+    }
+
+    /* Ensure main content takes full width */
+    main,
+    .container,
+    .max-w-7xl {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+    /* Specific Voucher Print Styling */
+    .voucher-print-container {
+        padding: 20px !important;
+    }
+}

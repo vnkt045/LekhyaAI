@@ -1,0 +1,1109 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Enums (mapped to string unions in TypeScript, but useful for DB constraints where supported, 
+// though SQLite doesn't enforce enums natively, Prisma handles validation)
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String   // Hashed
+  role      String   @default("user") // admin, accountant, viewer
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// INVENTORY MANAGEMENT MODELS
+// ============================================
+
+model InventoryItem {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  description   String?
+  category      String   // Raw Materials, Finished Goods, Trading Goods, etc.
+  unit          String   // pcs, kg, ltr, mtr, etc.
+  hsnCode       String?
+  gstRate       Float    @default(0)
+  
+  // Pricing
+  purchaseRate  Float
+  saleRate      Float
+  mrp           Float?
+  
+  // Stock Tracking
+  openingStock  Float    @default(0)
+  currentStock  Float    @default(0)
+  reorderLevel  Float    @default(0)
+  
+  // Valuation Method
+  valuationMethod String @default("FIFO") // FIFO, LIFO, Weighted Average
+  
+  // Relations
+  movements     StockMovement[]
+  voucherItems  VoucherItem[]
+  
+  isActive      Boolean  @default(true)
+
+  // Unit Conversion
+  alternateUnit      String?
+  conversionFactor   Float?   // e.g. 1 Box = 10 Pcs
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model StockMovement {
+  id            String   @id @default(cuid())
+  itemId        String
+  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  type          String   // IN (Purchase/Production), OUT (Sale/Consumption), ADJUST (Stock Adjustment)
+  quantity      Float
+  rate          Float
+  amount        Float
+  
+  // Reference
+  voucherId     String?
+  voucher       Voucher? @relation(fields: [voucherId], references: [id])
+  
+  referenceNo   String?
+  narration     String?
+  date          DateTime
+  
+  // Godown/Location (for multi-location inventory)
+  godownId      String?
+  godown        Godown?  @relation(fields: [godownId], references: [id])
+  
+  // Batch Wise Details
+  batchNumber   String?
+  expiryDate    DateTime?
+  manufacturingDate DateTime?
+
+  createdAt     DateTime @default(now())
+}
+
+model Godown {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  location      String?
+  stockMovements StockMovement[]
+  voucherItems   VoucherItem[]
+  createdAt     DateTime @default(now())
+}
+
+// ============================================
+// PAYROLL MODELS
+// ============================================
+
+// ============================================
+// PAYROLL MODELS (Enhanced)
+// ============================================
+
+model Employee {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  designation     String
+  department      String?
+  dateOfJoining   DateTime
+  dateOfLeaving   DateTime?
+  
+  // Bank Details
+  bankName        String?
+  accountNumber   String?
+  ifscCode        String?
+  
+  // Statutory Details
+  panNumber       String?
+  aadharNumber    String?
+  uanNumber       String?  // Universal Account Number for PF
+  esiNumber       String?
+  
+  // Relations
+  salaryDetails   EmployeeSalaryDetail[]
+  attendance      AttendanceEntry[]
+  salarySlips     SalarySlip[]
+  
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model PayHead {
+  id              String   @id @default(cuid())
+  name            String   @unique // e.g., Basic Salary, HRA, PF
+  type            String   // EARNINGS, DEDUCTIONS, REIMBURSEMENTS
+  calculationType String   // FLAT_RATE, ON_PRODUCTION, ON_ATTENDANCE, COMPUTED_VALUE
+  
+  // Ledger Integration
+  ledgerName      String?  // Name of the account ledger this maps to (e.g. "Salary Expense")
+  
+  // For Computed Value
+  formula         String?  // e.g., "(Basic + DA) * 12%" - simplified as string for now
+  
+  salaryDetails   EmployeeSalaryDetail[]
+  payHeadEntries  SalarySlipEntry[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model EmployeeSalaryDetail {
+  id              String   @id @default(cuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  payHeadId       String
+  payHead         PayHead  @relation(fields: [payHeadId], references: [id])
+  
+  amount          Float    // The defined amount (e.g., 50000 Basic) or Rate
+  effectiveFrom   DateTime @default(now())
+  
+  @@unique([employeeId, payHeadId])
+}
+
+model AttendanceType {
+  id              String   @id @default(cuid())
+  name            String   @unique // Present, Absent, Overtime, Sick Leave
+  unitName        String   // Days, Hours
+  isLeave         Boolean  @default(false) // Reduces salary?
+  isPaidLeave     Boolean  @default(false) // Does not reduce salary
+  
+  entries         AttendanceEntry[]
+}
+
+model AttendanceEntry {
+  id              String   @id @default(cuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  typeId          String
+  type            AttendanceType @relation(fields: [typeId], references: [id])
+  
+  date            DateTime // Date of attendance
+  value           Float    // 1 (day), 4 (hours) etc.
+  
+  createdAt       DateTime @default(now())
+}
+
+// Updated Salary Slip to be dynamic
+model SalarySlip {
+  id              String   @id @default(cuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  month           Int
+  year            Int
+  
+  grossSalary     Float
+  totalDeductions Float
+  netSalary       Float
+  
+  entries         SalarySlipEntry[]
+  
+  // Payment
+  paidOn          DateTime?
+  voucherId       String?
+  voucher         Voucher? @relation(fields: [voucherId], references: [id])
+  paymentMode     String?
+  status          String   @default("PENDING")
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([employeeId, month, year])
+}
+
+model SalarySlipEntry {
+  id              String   @id @default(cuid())
+  slipId          String
+  slip            SalarySlip @relation(fields: [slipId], references: [id], onDelete: Cascade)
+  
+  payHeadId       String
+  payHead         PayHead  @relation(fields: [payHeadId], references: [id])
+  
+  amount          Float
+  type            String   // EARNINGS or DEDUCTIONS (snapshot from PayHead)
+}
+
+
+
+
+model Company {
+  id                 String   @id @default(cuid())
+  name               String
+  gstin              String?
+  pan                String?
+  address            String
+  city               String
+  state              String
+  pincode            String
+  email              String
+  phone              String
+  financialYearStart DateTime
+  financialYearEnd   DateTime
+  baseCurrency       String   @default("INR")
+  
+  // Settings / Configuration
+  voucherPrefix      String   @default("VCH")
+  isAutoNumbering    Boolean  @default(true)
+  dateFormat         String   @default("DD-MM-YYYY")
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  
+  subscription       Subscription?
+}
+
+model Account {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  type        String   // Asset, Liability, Equity, Revenue, Expense
+  
+  // Self-relation for hierarchy (e.g., Current Assets -> Bank Accounts)
+  parentId    String?
+  parent      Account? @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children    Account[] @relation("AccountHierarchy")
+  
+  balance     Float    @default(0.0)
+  isActive    Boolean  @default(true)
+  isCostCenterEnabled Boolean @default(false)
+  
+  entries     VoucherEntry[]
+  tdsEntries  TDSEntry[] @relation("TDSParty")
+  tcsEntries  TCSEntry[] @relation("TCSParty")
+  
+  // Banking
+  chequeBooks ChequeBook[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model VoucherType {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  abbreviation    String
+  category        String   // Payment, Receipt, Sales, Purchase, Contra, Journal, Other
+  isSystemDefined Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  
+  // Numbering Configuration
+  prefix          String?
+  startingNumber  Int      @default(1)
+  
+  // Behavior Settings
+  affectsInventory Boolean @default(false)
+  requiresGST      Boolean @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Voucher {
+  id            String   @id @default(cuid())
+  voucherNumber String   @unique
+  voucherType   String   // Payment, Receipt, Contra, Journal, Sales, Purchase
+  date          DateTime
+  
+  totalDebit    Float
+  totalCredit   Float
+  narration     String
+  invoiceNumber String?    // Optional vendor invoice/bill reference
+
+  // Multi-Currency Support
+  currency      String   @default("INR")
+  exchangeRate  Float    @default(1.0)
+  
+  // Relations
+  entries       VoucherEntry[]
+  gstDetails    GSTDetails?
+  attachments   Attachment[]
+  aiInsights    AIInsight[]  @relation("VoucherInsights")
+  
+  createdBy     String   // User ID placeholder
+  isPosted      Boolean  @default(false)
+  isImmutable   Boolean  @default(false)
+  
+  // Post-Dated & Advanced Features
+  isPostDated   Boolean  @default(false)
+  pdcDate       DateTime?
+  regularizedDate DateTime?
+
+  isOptional    Boolean  @default(false) // Memo voucher
+  isRecurring   Boolean  @default(false) // Template
+  
+  stockMovements StockMovement[]
+  salarySlips    SalarySlip[]
+  items          VoucherItem[]
+  tdsEntries     TDSEntry[]
+  tcsEntries     TCSEntry[]
+
+  // Banking
+  chequeLeaf     ChequeLeaf?
+  
+  // E-Way Bill
+  ewayBills      EWayBill[]
+  
+  // Manufacturing
+  manufacturingJournals ManufacturingJournal[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt // Added for tracking
+}
+
+model VoucherEntry {
+  id          String   @id @default(cuid())
+  
+  voucherId   String
+  voucher     Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id])
+  accountName String   // Denormalized for easier querying if account deleted (though ideally keep referential integrity)
+  
+  debit       Float    @default(0.0)
+  credit      Float    @default(0.0)
+  
+  // Multi-Currency
+  foreignAmount Float?
+  
+  // Cost Allocations (Many-to-One)
+  allocations CostCenterAllocation[]
+  
+  narration   String?
+
+  // Banking
+  bankReconciliation BankReconciliation?
+}
+
+model CostCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  allocateRevenue Boolean @default(true)
+  allocateNonRevenue Boolean @default(false)
+  costCenters CostCenter[]
+}
+
+model CostCenter {
+  id          String   @id @default(cuid())
+  name        String
+  categoryId  String
+  category    CostCategory @relation(fields: [categoryId], references: [id])
+  
+  // Hierarchy Support
+  parentId    String?
+  parent      CostCenter? @relation("CostCenterHierarchy", fields: [parentId], references: [id])
+  children    CostCenter[] @relation("CostCenterHierarchy")
+  
+  allocations CostCenterAllocation[]
+}
+
+model CostCenterAllocation {
+  id             String       @id @default(cuid())
+  voucherEntryId String
+  voucherEntry   VoucherEntry @relation(fields: [voucherEntryId], references: [id], onDelete: Cascade)
+  
+  costCenterId   String
+  costCenter     CostCenter   @relation(fields: [costCenterId], references: [id])
+  
+  amount         Float        // Amount allocated to this center
+  
+  createdAt      DateTime     @default(now())
+}
+
+model VoucherItem {
+  id            String   @id @default(cuid())
+  voucherId     String
+  voucher       Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  
+  productName   String
+  description   String?
+  hsnSac        String?
+  
+  qty           Float    @default(0)
+  rate          Float    @default(0)
+  per           String?  // Unit (e.g. pcs, kg)
+  
+  taxableAmount Float    @default(0) // qty * rate
+  
+  cgstRate      Float    @default(0)
+  cgstAmount    Float    @default(0)
+  
+  sgstRate      Float    @default(0)
+  sgstAmount    Float    @default(0)
+  
+  igstRate      Float    @default(0)
+  igstAmount    Float    @default(0)
+  
+  totalAmount   Float    @default(0) // taxable + taxes
+
+  // Inventory Link
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  
+  // Storage Location
+  godownId      String?
+  godown        Godown?  @relation(fields: [godownId], references: [id])
+}
+
+model GSTDetails {
+  id            String   @id @default(cuid())
+  
+  voucherId     String   @unique
+  voucher       Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  
+  gstin         String // Party's GSTIN
+  gstType       String // CGST+SGST, IGST
+  rate          Float
+  taxableAmount Float
+  
+  // Individual tax components
+  cgstAmount    Float    @default(0)
+  sgstAmount    Float    @default(0)
+  igstAmount    Float    @default(0)
+  cessAmount    Float    @default(0)
+  
+  taxAmount     Float  // Total tax (for backward compatibility)
+  totalGST      Float  // Total GST amount
+  
+  hsnSac        String?
+  invoiceNumber String?
+  placeOfSupply String
+  reverseCharge Boolean  @default(false)
+}
+
+model Attachment {
+  id        String  @id @default(cuid())
+  url       String
+  voucherId String
+  voucher   Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+}
+
+model GSTReturn {
+  id         String   @id @default(cuid())
+  returnType String   // GSTR-1, GSTR-3B
+  period     String   // e.g., "2024-04"
+  status     String   // Draft, Filed
+  data       String   // JSON string storing the return data
+  filedDate  DateTime?
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model AIInsight {
+  id          String   @id @default(cuid())
+  type        String   // Anomaly, Suggestion
+  severity    String   // High, Medium, Low
+  title       String
+  description String
+  actionable  Boolean  @default(true)
+  
+  // Relations
+  relatedVouchers Voucher[] @relation("VoucherInsights")
+
+  createdAt   DateTime @default(now())
+}
+
+model Subscription {
+  id            String   @id @default(cuid())
+  companyId     String   @unique
+  company       Company  @relation(fields: [companyId], references: [id])
+  
+  planId        String   // SILVER, GOLD, PLATINUM
+  status        String   // ACTIVE, PAST_DUE, CANCELLED
+  
+  startDate     DateTime @default(now())
+  endDate       DateTime
+  
+  // Payment Details
+  paymentGateway String? // RAZORPAY, OFFLINE
+  transactionId  String?
+  amountPaid     Float   @default(0)
+  
+  // RBAC Features (JSON array of permission strings)
+  allowedFeatures String // Stored as JSON string e.g. ["payroll", "inventory"]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============================================
+// AUDIT TRAIL (MCA MANDATORY REQUIREMENT)
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  entityType  String   // "voucher", "account", "user", "company", "inventory", etc.
+  entityId    String   // ID of the entity being tracked
+  action      String   // "CREATE", "UPDATE", "DELETE"
+  userId      String   // User who made the change
+  userName    String   // Cached username for reporting
+  userEmail   String   // Cached email
+  timestamp   DateTime @default(now())
+  ipAddress   String?  // IP address of the user
+  userAgent   String?  // Browser/device info
+  oldValue    String?  // Previous state (JSON string for SQLite)
+  newValue    String?  // New state (JSON string for SQLite)
+  changes     String?  // Specific fields changed with before/after (JSON string)
+  description String?  // Human-readable description
+  
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([timestamp])
+  @@index([action])
+}
+
+// ============================================
+// TDS/TCS (TAX DEDUCTION/COLLECTION AT SOURCE)
+// ============================================
+
+model TDSSection {
+  id              String   @id @default(cuid())
+  section         String   @unique // "194Q", "194C", "194J", etc.
+  description     String
+  thresholdLimit  Float    // Threshold amount for TDS applicability
+  rateWithPAN     Float    // TDS rate if PAN is provided
+  rateWithoutPAN  Float    // TDS rate if PAN is not provided
+  applicableOn    String   // "payment", "credit"
+  isActive        Boolean  @default(true)
+  entries         TDSEntry[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model TDSEntry {
+  id            String     @id @default(cuid())
+  voucherId     String
+  voucher       Voucher    @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  sectionId     String
+  section       TDSSection @relation(fields: [sectionId], references: [id])
+  partyId       String
+  party         Account    @relation("TDSParty", fields: [partyId], references: [id])
+  panNumber     String?
+  amount        Float      // Taxable amount
+  tdsAmount     Float      // TDS deducted
+  tdsRate       Float      // Rate applied
+  quarter       String     // "Q1-2024", "Q2-2024", etc.
+  financialYear String     // "2023-24"
+  challanNo     String?
+  challanDate   DateTime?
+  filedDate     DateTime?
+  createdAt     DateTime   @default(now())
+  
+  @@index([quarter, financialYear])
+  @@index([partyId])
+  @@index([voucherId])
+}
+
+model TCSConfig {
+  id          String     @id @default(cuid())
+  goodsType   String     @unique // "Scrap", "Minerals", "Timber", etc.
+  description String
+  threshold   Float      // Threshold amount for TCS applicability
+  rate        Float      // TCS rate
+  isActive    Boolean    @default(true)
+  entries     TCSEntry[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model TCSEntry {
+  id            String     @id @default(cuid())
+  voucherId     String
+  voucher       Voucher    @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  configId      String
+  config        TCSConfig  @relation(fields: [configId], references: [id])
+  partyId       String
+  party         Account    @relation("TCSParty", fields: [partyId], references: [id])
+  amount        Float      // Sale amount
+  tcsAmount     Float      // TCS collected
+  tcsRate       Float      // Rate applied
+  quarter       String     // "Q1-2024", "Q2-2024", etc.
+  financialYear String     // "2023-24"
+  createdAt     DateTime   @default(now())
+  
+  @@index([quarter, financialYear])
+  @@index([partyId])
+  @@index([voucherId])
+}
+
+
+// ============================================
+// BANKING MODULE (PHASE 2)
+// ============================================
+
+model BankReconciliation {
+  id              String       @id @default(cuid())
+  voucherEntryId  String       @unique // One-to-one with the ledger entry
+  voucherEntry    VoucherEntry @relation(fields: [voucherEntryId], references: [id], onDelete: Cascade)
+  
+  bankDate        DateTime     // Date cleared in bank
+  reconciledDate  DateTime     @default(now()) // When the user reconciled it in system
+  status          String       @default("RECONCILED") // RECONCILED (since valid bankDate implies it)
+  
+  @@index([bankDate])
+}
+
+model ChequeBook {
+  id              String       @id @default(cuid())
+  accountId       String       // The Bank Ledger
+  account         Account      @relation(fields: [accountId], references: [id])
+  
+  name            String       // e.g. "HDFC Book 1"
+  fromNumber      Int          // 100001
+  toNumber        Int          // 100050
+  numberOfLeaves  Int          // 50
+  
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  
+  leaves          ChequeLeaf[]
+}
+
+model ChequeLeaf {
+  id              String       @id @default(cuid())
+  bookId          String
+  book            ChequeBook   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  
+  chequeNumber    String       // "100001" (String to preserve leading zeros if needed)
+  status          String       @default("AVAILABLE") // AVAILABLE, ISSUED, CANCELLED, BLANK
+  
+  // If Issued
+  voucherId       String?      @unique
+  voucher         Voucher?     @relation(fields: [voucherId], references: [id])
+  issuedDate      DateTime?
+  issuedTo        String?      // Party Name
+  
+  amount          Float?
+}
+
+ 
+ 
+ 
+ / /   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+ 
+ / /   P H A S E   3 :   I N V E N T O R Y   &   M A N U F A C T U R I N G   M O D E L S 
+ 
+ / /   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+ 
+ 
+ 
+ m o d e l   S t o c k G r o u p   { 
+ 
+     i d                     S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     n a m e                 S t r i n g       @ u n i q u e 
+ 
+     d e s c r i p t i o n   S t r i n g ? 
+ 
+     
+ 
+     / /   H i e r a r c h y 
+ 
+     p a r e n t I d         S t r i n g ? 
+ 
+     p a r e n t             S t o c k G r o u p ?   @ r e l a t i o n ( " S t o c k G r o u p H i e r a r c h y " ,   f i e l d s :   [ p a r e n t I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     c h i l d r e n         S t o c k G r o u p [ ]   @ r e l a t i o n ( " S t o c k G r o u p H i e r a r c h y " ) 
+ 
+     
+ 
+     i t e m s               I n v e n t o r y I t e m [ ] 
+ 
+     c r e a t e d A t       D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+     u p d a t e d A t       D a t e T i m e   @ u p d a t e d A t 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   U n i t O f M e a s u r e   { 
+ 
+     i d                           S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     n a m e                       S t r i n g       @ u n i q u e 
+ 
+     s y m b o l                   S t r i n g 
+ 
+     d e c i m a l P l a c e s     I n t             @ d e f a u l t ( 2 ) 
+ 
+     
+ 
+     i t e m s                     I n v e n t o r y I t e m [ ] 
+ 
+     c r e a t e d A t             D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   B a t c h T r a c k i n g   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     b a t c h N u m b e r           S t r i n g 
+ 
+     i t e m I d                     S t r i n g 
+ 
+     i t e m                         I n v e n t o r y I t e m   @ r e l a t i o n ( f i e l d s :   [ i t e m I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     
+ 
+     m a n u f a c t u r i n g D a t e   D a t e T i m e ? 
+ 
+     e x p i r y D a t e                 D a t e T i m e ? 
+ 
+     q u a n t i t y                     F l o a t 
+ 
+     
+ 
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+     
+ 
+     @ @ u n i q u e ( [ i t e m I d ,   b a t c h N u m b e r ] ) 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   S e r i a l N u m b e r   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     s e r i a l N u m b e r         S t r i n g       @ u n i q u e 
+ 
+     i t e m I d                     S t r i n g 
+ 
+     i t e m                         I n v e n t o r y I t e m   @ r e l a t i o n ( f i e l d s :   [ i t e m I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     
+ 
+     s t a t u s                     S t r i n g       / /   A v a i l a b l e ,   S o l d ,   D e f e c t i v e 
+ 
+     
+ 
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   B i l l O f M a t e r i a l   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     n a m e                         S t r i n g 
+ 
+     f i n i s h e d I t e m I d     S t r i n g 
+ 
+     f i n i s h e d I t e m         I n v e n t o r y I t e m   @ r e l a t i o n ( " F i n i s h e d I t e m " ,   f i e l d s :   [ f i n i s h e d I t e m I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     
+ 
+     c o m p o n e n t s             B O M C o m p o n e n t [ ] 
+ 
+     m a n u f a c t u r i n g J o u r n a l s   M a n u f a c t u r i n g J o u r n a l [ ] 
+ 
+     
+ 
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+     u p d a t e d A t               D a t e T i m e   @ u p d a t e d A t 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   B O M C o m p o n e n t   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     b o m I d                       S t r i n g 
+ 
+     b o m                           B i l l O f M a t e r i a l   @ r e l a t i o n ( f i e l d s :   [ b o m I d ] ,   r e f e r e n c e s :   [ i d ] ,   o n D e l e t e :   C a s c a d e ) 
+ 
+     
+ 
+     i t e m I d                     S t r i n g 
+ 
+     i t e m                         I n v e n t o r y I t e m   @ r e l a t i o n ( " B O M C o m p o n e n t I t e m " ,   f i e l d s :   [ i t e m I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     
+ 
+     q u a n t i t y                 F l o a t 
+ 
+     w a s t a g e P e r c e n t     F l o a t         @ d e f a u l t ( 0 ) 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   M a n u f a c t u r i n g J o u r n a l   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     j o u r n a l N u m b e r       S t r i n g       @ u n i q u e 
+ 
+     d a t e                         D a t e T i m e 
+ 
+     b o m I d                       S t r i n g 
+ 
+     b o m                           B i l l O f M a t e r i a l   @ r e l a t i o n ( f i e l d s :   [ b o m I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     
+ 
+     v o u c h e r I d               S t r i n g 
+ 
+     v o u c h e r                   V o u c h e r     @ r e l a t i o n ( f i e l d s :   [ v o u c h e r I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     
+ 
+     q u a n t i t y P r o d u c e d   F l o a t 
+ 
+     t o t a l C o s t                 F l o a t 
+ 
+     
+ 
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+ } 
+ 
+ 
+ 
+ / /   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+ 
+ / /   P H A S E   4 :   A D V A N C E D   F E A T U R E S   M O D E L S 
+ 
+ / /   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+ 
+ 
+ 
+ m o d e l   C u r r e n c y   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     c o d e                         S t r i n g       @ u n i q u e   / /   U S D ,   E U R ,   G B P 
+ 
+     n a m e                         S t r i n g 
+ 
+     s y m b o l                     S t r i n g 
+ 
+     
+ 
+     e x c h a n g e R a t e s       E x c h a n g e R a t e [ ] 
+ 
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   E x c h a n g e R a t e   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     c u r r e n c y I d             S t r i n g 
+ 
+     c u r r e n c y                 C u r r e n c y   @ r e l a t i o n ( f i e l d s :   [ c u r r e n c y I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     
+ 
+     d a t e                         D a t e T i m e 
+ 
+     r a t e                         F l o a t         / /   1   F o r e i g n   C u r r e n c y   =   X   I N R 
+ 
+     
+ 
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+     
+ 
+     @ @ u n i q u e ( [ c u r r e n c y I d ,   d a t e ] ) 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   E m p l o y e e   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     e m p l o y e e C o d e         S t r i n g       @ u n i q u e 
+ 
+     n a m e                         S t r i n g 
+ 
+     e m a i l                       S t r i n g ? 
+ 
+     p h o n e                       S t r i n g ? 
+ 
+     
+ 
+     d e s i g n a t i o n           S t r i n g ? 
+ 
+     d e p a r t m e n t             S t r i n g ? 
+ 
+     d a t e O f J o i n i n g       D a t e T i m e 
+ 
+     
+ 
+     s a l a r y S t r u c t u r e I d   S t r i n g ? 
+ 
+     s a l a r y S t r u c t u r e       S a l a r y S t r u c t u r e ?   @ r e l a t i o n ( f i e l d s :   [ s a l a r y S t r u c t u r e I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     
+ 
+     s a l a r y S l i p s           S a l a r y S l i p [ ] 
+ 
+     
+ 
+     i s A c t i v e                 B o o l e a n     @ d e f a u l t ( t r u e ) 
+ 
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+     u p d a t e d A t               D a t e T i m e   @ u p d a t e d A t 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   S a l a r y S t r u c t u r e   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     n a m e                         S t r i n g 
+ 
+     
+ 
+     b a s i c S a l a r y           F l o a t 
+ 
+     h r a                           F l o a t         @ d e f a u l t ( 0 ) 
+ 
+     c o n v e y a n c e             F l o a t         @ d e f a u l t ( 0 ) 
+ 
+     m e d i c a l A l l o w a n c e   F l o a t       @ d e f a u l t ( 0 ) 
+ 
+     o t h e r A l l o w a n c e s   F l o a t         @ d e f a u l t ( 0 ) 
+ 
+     
+ 
+     p f                             F l o a t         @ d e f a u l t ( 0 ) 
+ 
+     e s i                           F l o a t         @ d e f a u l t ( 0 ) 
+ 
+     p r o f e s s i o n a l T a x   F l o a t         @ d e f a u l t ( 0 ) 
+ 
+     
+ 
+     e m p l o y e e s               E m p l o y e e [ ] 
+ 
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+     u p d a t e d A t               D a t e T i m e   @ u p d a t e d A t 
+ 
+ } 
+ 
+ 
+ 
+ m o d e l   E W a y B i l l   { 
+ 
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) ) 
+ 
+     e w a y B i l l N u m b e r     S t r i n g       @ u n i q u e 
+ 
+     v o u c h e r I d               S t r i n g 
+ 
+     v o u c h e r                   V o u c h e r     @ r e l a t i o n ( f i e l d s :   [ v o u c h e r I d ] ,   r e f e r e n c e s :   [ i d ] ) 
+ 
+     
+ 
+     t r a n s p o r t e r I d       S t r i n g ? 
+ 
+     v e h i c l e N u m b e r       S t r i n g ? 
+ 
+     d i s t a n c e                 F l o a t ? 
+ 
+     
+ 
+     g e n e r a t e d D a t e       D a t e T i m e 
+ 
+     v a l i d U n t i l             D a t e T i m e 
+ 
+     
+ 
+     s t a t u s                     S t r i n g       / /   G e n e r a t e d ,   C a n c e l l e d 
+ 
+     
+ 
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) ) 
+ 
+ } 
+ 
+  
+ / /   G o d o w n   ( W a r e h o u s e )   M o d e l s  
+ m o d e l   G o d o w n   {  
+     i d                     S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) )  
+     n a m e                 S t r i n g       @ u n i q u e  
+     l o c a t i o n         S t r i n g ?  
+      
+     / /   H i e r a r c h y   S u p p o r t  
+     p a r e n t I d         S t r i n g ?  
+     p a r e n t             G o d o w n ?     @ r e l a t i o n ( " G o d o w n H i e r a r c h y " ,   f i e l d s :   [ p a r e n t I d ] ,   r e f e r e n c e s :   [ i d ] )  
+     c h i l d r e n         G o d o w n [ ]   @ r e l a t i o n ( " G o d o w n H i e r a r c h y " )  
+      
+     s t o c k M o v e m e n t s   S t o c k M o v e m e n t [ ]  
+     v o u c h e r I t e m s       V o u c h e r I t e m [ ]  
+     t r a n s f e r s F r o m     S t o c k T r a n s f e r [ ]   @ r e l a t i o n ( " F r o m G o d o w n " )  
+     t r a n s f e r s T o         S t o c k T r a n s f e r [ ]   @ r e l a t i o n ( " T o G o d o w n " )  
+      
+     c r e a t e d A t       D a t e T i m e   @ d e f a u l t ( n o w ( ) )  
+     u p d a t e d A t       D a t e T i m e   @ u p d a t e d A t  
+ }  
+  
+ m o d e l   S t o c k T r a n s f e r   {  
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) )  
+     t r a n s f e r N u m b e r     S t r i n g       @ u n i q u e  
+     d a t e                         D a t e T i m e  
+      
+     f r o m G o d o w n I d         S t r i n g  
+     f r o m G o d o w n             G o d o w n       @ r e l a t i o n ( " F r o m G o d o w n " ,   f i e l d s :   [ f r o m G o d o w n I d ] ,   r e f e r e n c e s :   [ i d ] )  
+      
+     t o G o d o w n I d             S t r i n g  
+     t o G o d o w n                 G o d o w n       @ r e l a t i o n ( " T o G o d o w n " ,   f i e l d s :   [ t o G o d o w n I d ] ,   r e f e r e n c e s :   [ i d ] )  
+      
+     i t e m s                       S t o c k T r a n s f e r I t e m [ ]  
+     s t a t u s                     S t r i n g       @ d e f a u l t ( " P E N D I N G " )   / /   P E N D I N G ,   C O M P L E T E D  
+      
+     c r e a t e d B y               S t r i n g  
+     c r e a t e d A t               D a t e T i m e   @ d e f a u l t ( n o w ( ) )  
+     c o m p l e t e d A t           D a t e T i m e ?  
+ }  
+  
+ m o d e l   S t o c k T r a n s f e r I t e m   {  
+     i d                             S t r i n g       @ i d   @ d e f a u l t ( c u i d ( ) )  
+     t r a n s f e r I d             S t r i n g  
+     t r a n s f e r                 S t o c k T r a n s f e r   @ r e l a t i o n ( f i e l d s :   [ t r a n s f e r I d ] ,   r e f e r e n c e s :   [ i d ] ,   o n D e l e t e :   C a s c a d e )  
+      
+     i t e m I d                     S t r i n g  
+     i t e m                         I n v e n t o r y I t e m   @ r e l a t i o n ( " T r a n s f e r I t e m s " ,   f i e l d s :   [ i t e m I d ] ,   r e f e r e n c e s :   [ i d ] )  
+      
+     q u a n t i t y                 F l o a t  
+     b a t c h N u m b e r           S t r i n g ?  
+ }  
+ 

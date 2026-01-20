@@ -1,0 +1,1134 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Enums (mapped to string unions in TypeScript, but useful for DB constraints where supported, 
+// though SQLite doesn't enforce enums natively, Prisma handles validation)
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String // Hashed
+  role      String   @default("user") // admin, accountant, viewer
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// INVENTORY MANAGEMENT MODELS
+// ============================================
+
+model InventoryItem {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+  category    String // Raw Materials, Finished Goods, Trading Goods, etc.
+  unit        String // pcs, kg, ltr, mtr, etc.
+  hsnCode     String?
+  gstRate     Float   @default(0)
+
+  // Pricing
+  purchaseRate Float
+  saleRate     Float
+  mrp          Float?
+
+  // Stock Tracking
+  openingStock Float @default(0)
+  currentStock Float @default(0)
+  reorderLevel Float @default(0)
+
+  // Valuation Method
+  valuationMethod String @default("FIFO") // FIFO, LIFO, Weighted Average
+
+  // Relations
+  movements    StockMovement[]
+  voucherItems VoucherItem[]
+
+  isActive Boolean @default(true)
+
+  // Unit Conversion
+  alternateUnit    String?
+  conversionFactor Float? // e.g. 1 Box = 10 Pcs
+
+  // Missing Relations (Fixed)
+  stockGroupId String?
+  stockGroup   StockGroup? @relation(fields: [stockGroupId], references: [id])
+
+  uomId String?
+  uom   UnitOfMeasure? @relation(fields: [uomId], references: [id])
+
+  serialNumbers    SerialNumber[]
+  bomFinishedItems BillOfMaterial[]    @relation("FinishedItem")
+  bomComponents    BOMComponent[]      @relation("BOMComponentItem")
+  transferItems    StockTransferItem[] @relation("TransferItems")
+  batches          BatchTracking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StockMovement {
+  id     String        @id @default(cuid())
+  itemId String
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  type     String // IN (Purchase/Production), OUT (Sale/Consumption), ADJUST (Stock Adjustment)
+  quantity Float
+  rate     Float
+  amount   Float
+
+  // Reference
+  voucherId String?
+  voucher   Voucher? @relation(fields: [voucherId], references: [id])
+
+  referenceNo String?
+  narration   String?
+  date        DateTime
+
+  // Godown/Location (for multi-location inventory)
+  godownId String?
+  godown   Godown? @relation(fields: [godownId], references: [id])
+
+  // Batch Wise Details
+  batchNumber       String?
+  expiryDate        DateTime?
+  manufacturingDate DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+// ============================================
+// PAYROLL MODELS
+// ============================================
+
+// ============================================
+// PAYROLL MODELS (Enhanced)
+// ============================================
+
+// ============================================
+
+model PayHead {
+  id              String @id @default(cuid())
+  name            String @unique // e.g., Basic Salary, HRA, PF
+  type            String // EARNINGS, DEDUCTIONS, REIMBURSEMENTS
+  calculationType String // FLAT_RATE, ON_PRODUCTION, ON_ATTENDANCE, COMPUTED_VALUE
+
+  // Ledger Integration
+  ledgerName String? // Name of the account ledger this maps to (e.g. "Salary Expense")
+
+  // For Computed Value
+  formula String? // e.g., "(Basic + DA) * 12%" - simplified as string for now
+
+  salaryDetails  EmployeeSalaryDetail[]
+  payHeadEntries SalarySlipEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmployeeSalaryDetail {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  payHeadId String
+  payHead   PayHead @relation(fields: [payHeadId], references: [id])
+
+  amount        Float // The defined amount (e.g., 50000 Basic) or Rate
+  effectiveFrom DateTime @default(now())
+
+  @@unique([employeeId, payHeadId])
+}
+
+model AttendanceType {
+  id          String  @id @default(cuid())
+  name        String  @unique // Present, Absent, Overtime, Sick Leave
+  unitName    String // Days, Hours
+  isLeave     Boolean @default(false) // Reduces salary?
+  isPaidLeave Boolean @default(false) // Does not reduce salary
+
+  entries AttendanceEntry[]
+}
+
+model AttendanceEntry {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  typeId String
+  type   AttendanceType @relation(fields: [typeId], references: [id])
+
+  date  DateTime // Date of attendance
+  value Float // 1 (day), 4 (hours) etc.
+
+  createdAt DateTime @default(now())
+}
+
+// Updated Salary Slip to be dynamic
+model SalarySlip {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  month Int
+  year  Int
+
+  grossSalary     Float
+  totalDeductions Float
+  netSalary       Float
+
+  entries SalarySlipEntry[]
+
+  // Payment
+  paidOn      DateTime?
+  voucherId   String?
+  voucher     Voucher?  @relation(fields: [voucherId], references: [id])
+  paymentMode String?
+  status      String    @default("PENDING")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, month, year])
+}
+
+model SalarySlipEntry {
+  id     String     @id @default(cuid())
+  slipId String
+  slip   SalarySlip @relation(fields: [slipId], references: [id], onDelete: Cascade)
+
+  payHeadId String
+  payHead   PayHead @relation(fields: [payHeadId], references: [id])
+
+  amount Float
+  type   String // EARNINGS or DEDUCTIONS (snapshot from PayHead)
+}
+
+model Company {
+  id                 String   @id @default(cuid())
+  name               String
+  gstin              String?
+  pan                String?
+  address            String
+  city               String
+  state              String
+  pincode            String
+  email              String
+  phone              String
+  financialYearStart DateTime
+  financialYearEnd   DateTime
+  baseCurrency       String   @default("INR")
+
+  // Settings / Configuration
+  voucherPrefix   String  @default("VCH")
+  isAutoNumbering Boolean @default(true)
+  dateFormat      String  @default("DD-MM-YYYY")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscription Subscription?
+}
+
+model Account {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+  type String // Asset, Liability, Equity, Revenue, Expense
+
+  // Self-relation for hierarchy (e.g., Current Assets -> Bank Accounts)
+  parentId String?
+  parent   Account?  @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children Account[] @relation("AccountHierarchy")
+
+  balance             Float   @default(0.0)
+  isActive            Boolean @default(true)
+  isCostCenterEnabled Boolean @default(false)
+
+  entries    VoucherEntry[]
+  tdsEntries TDSEntry[]     @relation("TDSParty")
+  tcsEntries TCSEntry[]     @relation("TCSParty")
+
+  // Banking
+  chequeBooks ChequeBook[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VoucherType {
+  id              String  @id @default(cuid())
+  name            String  @unique
+  abbreviation    String
+  category        String // Payment, Receipt, Sales, Purchase, Contra, Journal, Other
+  isSystemDefined Boolean @default(false)
+  isActive        Boolean @default(true)
+
+  // Numbering Configuration
+  prefix         String?
+  startingNumber Int     @default(1)
+
+  // Behavior Settings
+  affectsInventory Boolean @default(false)
+  requiresGST      Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Voucher {
+  id            String   @id @default(cuid())
+  voucherNumber String   @unique
+  voucherType   String // Payment, Receipt, Contra, Journal, Sales, Purchase
+  date          DateTime
+
+  totalDebit    Float
+  totalCredit   Float
+  narration     String
+  invoiceNumber String? // Optional vendor invoice/bill reference
+
+  // Multi-Currency Support
+  currency     String @default("INR")
+  exchangeRate Float  @default(1.0)
+
+  // Relations
+  entries     VoucherEntry[]
+  gstDetails  GSTDetails?
+  attachments Attachment[]
+  aiInsights  AIInsight[]    @relation("VoucherInsights")
+
+  createdBy   String // User ID placeholder
+  isPosted    Boolean @default(false)
+  isImmutable Boolean @default(false)
+
+  // Post-Dated & Advanced Features
+  isPostDated     Boolean   @default(false)
+  pdcDate         DateTime?
+  regularizedDate DateTime?
+
+  isOptional  Boolean @default(false) // Memo voucher
+  isRecurring Boolean @default(false) // Template
+
+  stockMovements StockMovement[]
+  salarySlips    SalarySlip[]
+  items          VoucherItem[]
+  tdsEntries     TDSEntry[]
+  tcsEntries     TCSEntry[]
+
+  // Banking
+  chequeLeaf ChequeLeaf?
+
+  // E-Way Bill
+  ewayBills EWayBill[]
+
+  // Manufacturing
+  manufacturingJournals ManufacturingJournal[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // Added for tracking
+}
+
+model VoucherEntry {
+  id String @id @default(cuid())
+
+  voucherId String
+  voucher   Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  accountId   String
+  account     Account @relation(fields: [accountId], references: [id])
+  accountName String // Denormalized for easier querying if account deleted (though ideally keep referential integrity)
+
+  debit  Float @default(0.0)
+  credit Float @default(0.0)
+
+  // Multi-Currency
+  foreignAmount Float?
+
+  // Cost Allocations (Many-to-One)
+  allocations CostCenterAllocation[]
+
+  narration String?
+
+  // Banking
+  bankReconciliation BankReconciliation?
+}
+
+model CostCategory {
+  id                 String       @id @default(cuid())
+  name               String       @unique
+  allocateRevenue    Boolean      @default(true)
+  allocateNonRevenue Boolean      @default(false)
+  costCenters        CostCenter[]
+}
+
+model CostCenter {
+  id         String       @id @default(cuid())
+  name       String
+  categoryId String
+  category   CostCategory @relation(fields: [categoryId], references: [id])
+
+  // Hierarchy Support
+  parentId String?
+  parent   CostCenter?  @relation("CostCenterHierarchy", fields: [parentId], references: [id])
+  children CostCenter[] @relation("CostCenterHierarchy")
+
+  allocations CostCenterAllocation[]
+}
+
+model CostCenterAllocation {
+  id             String       @id @default(cuid())
+  voucherEntryId String
+  voucherEntry   VoucherEntry @relation(fields: [voucherEntryId], references: [id], onDelete: Cascade)
+
+  costCenterId String
+  costCenter   CostCenter @relation(fields: [costCenterId], references: [id])
+
+  amount Float // Amount allocated to this center
+
+  createdAt DateTime @default(now())
+}
+
+model VoucherItem {
+  id        String  @id @default(cuid())
+  voucherId String
+  voucher   Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  productName String
+  description String?
+  hsnSac      String?
+
+  qty  Float   @default(0)
+  rate Float   @default(0)
+  per  String? // Unit (e.g. pcs, kg)
+
+  taxableAmount Float @default(0) // qty * rate
+
+  cgstRate   Float @default(0)
+  cgstAmount Float @default(0)
+
+  sgstRate   Float @default(0)
+  sgstAmount Float @default(0)
+
+  igstRate   Float @default(0)
+  igstAmount Float @default(0)
+
+  totalAmount Float @default(0) // taxable + taxes
+
+  // Inventory Link
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+
+  // Storage Location
+  godownId String?
+  godown   Godown? @relation(fields: [godownId], references: [id])
+}
+
+model GSTDetails {
+  id String @id @default(cuid())
+
+  voucherId String  @unique
+  voucher   Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  gstin         String // Party's GSTIN
+  gstType       String // CGST+SGST, IGST
+  rate          Float
+  taxableAmount Float
+
+  // Individual tax components
+  cgstAmount Float @default(0)
+  sgstAmount Float @default(0)
+  igstAmount Float @default(0)
+  cessAmount Float @default(0)
+
+  taxAmount Float // Total tax (for backward compatibility)
+  totalGST  Float // Total GST amount
+
+  hsnSac        String?
+  invoiceNumber String?
+  placeOfSupply String
+  reverseCharge Boolean @default(false)
+}
+
+model Attachment {
+  id        String  @id @default(cuid())
+  url       String
+  voucherId String
+  voucher   Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+}
+
+model GSTReturn {
+  id         String    @id @default(cuid())
+  returnType String // GSTR-1, GSTR-3B
+  period     String // e.g., "2024-04"
+  status     String // Draft, Filed
+  data       String // JSON string storing the return data
+  filedDate  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AIInsight {
+  id          String  @id @default(cuid())
+  type        String // Anomaly, Suggestion
+  severity    String // High, Medium, Low
+  title       String
+  description String
+  actionable  Boolean @default(true)
+
+  // Relations
+  relatedVouchers Voucher[] @relation("VoucherInsights")
+
+  createdAt DateTime @default(now())
+}
+
+model Subscription {
+  id        String  @id @default(cuid())
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id])
+
+  planId String // SILVER, GOLD, PLATINUM
+  status String // ACTIVE, PAST_DUE, CANCELLED
+
+  startDate DateTime @default(now())
+  endDate   DateTime
+
+  // Payment Details
+  paymentGateway String? // RAZORPAY, OFFLINE
+  transactionId  String?
+  amountPaid     Float   @default(0)
+
+  // RBAC Features (JSON array of permission strings)
+  allowedFeatures String // Stored as JSON string e.g. ["payroll", "inventory"]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// AUDIT TRAIL (MCA MANDATORY REQUIREMENT)
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  entityType  String // "voucher", "account", "user", "company", "inventory", etc.
+  entityId    String // ID of the entity being tracked
+  action      String // "CREATE", "UPDATE", "DELETE"
+  userId      String // User who made the change
+  userName    String // Cached username for reporting
+  userEmail   String // Cached email
+  timestamp   DateTime @default(now())
+  ipAddress   String? // IP address of the user
+  userAgent   String? // Browser/device info
+  oldValue    String? // Previous state (JSON string for SQLite)
+  newValue    String? // New state (JSON string for SQLite)
+  changes     String? // Specific fields changed with before/after (JSON string)
+  description String? // Human-readable description
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([timestamp])
+  @@index([action])
+}
+
+// ============================================
+// TDS/TCS (TAX DEDUCTION/COLLECTION AT SOURCE)
+// ============================================
+
+model TDSSection {
+  id             String     @id @default(cuid())
+  section        String     @unique // "194Q", "194C", "194J", etc.
+  description    String
+  thresholdLimit Float // Threshold amount for TDS applicability
+  rateWithPAN    Float // TDS rate if PAN is provided
+  rateWithoutPAN Float // TDS rate if PAN is not provided
+  applicableOn   String // "payment", "credit"
+  isActive       Boolean    @default(true)
+  entries        TDSEntry[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model TDSEntry {
+  id            String     @id @default(cuid())
+  voucherId     String
+  voucher       Voucher    @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  sectionId     String
+  section       TDSSection @relation(fields: [sectionId], references: [id])
+  partyId       String
+  party         Account    @relation("TDSParty", fields: [partyId], references: [id])
+  panNumber     String?
+  amount        Float // Taxable amount
+  tdsAmount     Float // TDS deducted
+  tdsRate       Float // Rate applied
+  quarter       String // "Q1-2024", "Q2-2024", etc.
+  financialYear String // "2023-24"
+  challanNo     String?
+  challanDate   DateTime?
+  filedDate     DateTime?
+  createdAt     DateTime   @default(now())
+
+  @@index([quarter, financialYear])
+  @@index([partyId])
+  @@index([voucherId])
+}
+
+model TCSConfig {
+  id          String     @id @default(cuid())
+  goodsType   String     @unique // "Scrap", "Minerals", "Timber", etc.
+  description String
+  threshold   Float // Threshold amount for TCS applicability
+  rate        Float // TCS rate
+  isActive    Boolean    @default(true)
+  entries     TCSEntry[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model TCSEntry {
+  id            String    @id @default(cuid())
+  voucherId     String
+  voucher       Voucher   @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  configId      String
+  config        TCSConfig @relation(fields: [configId], references: [id])
+  partyId       String
+  party         Account   @relation("TCSParty", fields: [partyId], references: [id])
+  amount        Float // Sale amount
+  tcsAmount     Float // TCS collected
+  tcsRate       Float // Rate applied
+  quarter       String // "Q1-2024", "Q2-2024", etc.
+  financialYear String // "2023-24"
+  createdAt     DateTime  @default(now())
+
+  @@index([quarter, financialYear])
+  @@index([partyId])
+  @@index([voucherId])
+}
+
+// ============================================
+// BANKING MODULE (PHASE 2)
+// ============================================
+
+model BankReconciliation {
+  id             String       @id @default(cuid())
+  voucherEntryId String       @unique // One-to-one with the ledger entry
+  voucherEntry   VoucherEntry @relation(fields: [voucherEntryId], references: [id], onDelete: Cascade)
+
+  bankDate       DateTime // Date cleared in bank
+  reconciledDate DateTime @default(now()) // When the user reconciled it in system
+  status         String   @default("RECONCILED") // RECONCILED (since valid bankDate implies it)
+
+  @@index([bankDate])
+}
+
+model ChequeBook {
+  id        String  @id @default(cuid())
+  accountId String // The Bank Ledger
+  account   Account @relation(fields: [accountId], references: [id])
+
+  name           String // e.g. "HDFC Book 1"
+  fromNumber     Int // 100001
+  toNumber       Int // 100050
+  numberOfLeaves Int // 50
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  leaves ChequeLeaf[]
+}
+
+model ChequeLeaf {
+  id     String     @id @default(cuid())
+  bookId String
+  book   ChequeBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  chequeNumber String // "100001" (String to preserve leading zeros if needed)
+  status       String @default("AVAILABLE") // AVAILABLE, ISSUED, CANCELLED, BLANK
+
+  // If Issued
+  voucherId  String?   @unique
+  voucher    Voucher?  @relation(fields: [voucherId], references: [id])
+  issuedDate DateTime?
+  issuedTo   String? // Party Name
+
+  amount Float?
+}
+
+// ============================================
+
+// PHASE 3: INVENTORY & MANUFACTURING MODELS
+
+// ============================================
+
+model StockGroup {
+  id String @id @default(cuid())
+
+  name String @unique
+
+  description String?
+
+  // Hierarchy
+
+  parentId String?
+
+  parent StockGroup? @relation("StockGroupHierarchy", fields: [parentId], references: [id])
+
+  children StockGroup[] @relation("StockGroupHierarchy")
+
+  items InventoryItem[]
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+}
+
+model UnitOfMeasure {
+  id String @id @default(cuid())
+
+  name String @unique
+
+  symbol String
+
+  decimalPlaces Int @default(2)
+
+  items InventoryItem[]
+
+  createdAt DateTime @default(now())
+}
+
+model BatchTracking {
+  id String @id @default(cuid())
+
+  batchNumber String
+
+  itemId String
+
+  item InventoryItem @relation(fields: [itemId], references: [id])
+
+  manufacturingDate DateTime?
+
+  expiryDate DateTime?
+
+  quantity Float
+
+  createdAt DateTime @default(now())
+
+  @@unique([itemId, batchNumber])
+}
+
+model SerialNumber {
+  id String @id @default(cuid())
+
+  serialNumber String @unique
+
+  itemId String
+
+  item InventoryItem @relation(fields: [itemId], references: [id])
+
+  status String // Available, Sold, Defective
+
+  createdAt DateTime @default(now())
+}
+
+model BillOfMaterial {
+  id String @id @default(cuid())
+
+  name String
+
+  finishedItemId String
+
+  finishedItem InventoryItem @relation("FinishedItem", fields: [finishedItemId], references: [id])
+
+  components BOMComponent[]
+
+  manufacturingJournals ManufacturingJournal[]
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+}
+
+model BOMComponent {
+  id String @id @default(cuid())
+
+  bomId String
+
+  bom BillOfMaterial @relation(fields: [bomId], references: [id], onDelete: Cascade)
+
+  itemId String
+
+  item InventoryItem @relation("BOMComponentItem", fields: [itemId], references: [id])
+
+  quantity Float
+
+  wastagePercent Float @default(0)
+}
+
+model ManufacturingJournal {
+  id String @id @default(cuid())
+
+  journalNumber String @unique
+
+  date DateTime
+
+  bomId String
+
+  bom BillOfMaterial @relation(fields: [bomId], references: [id])
+
+  voucherId String
+
+  voucher Voucher @relation(fields: [voucherId], references: [id])
+
+  quantityProduced Float
+
+  totalCost Float
+
+  createdAt DateTime @default(now())
+}
+
+// ============================================
+
+// PHASE 4: ADVANCED FEATURES MODELS
+
+// ============================================
+
+model Currency {
+  id String @id @default(cuid())
+
+  code String @unique // USD, EUR, GBP
+
+  name String
+
+  symbol String
+
+  exchangeRates ExchangeRate[]
+
+  createdAt DateTime @default(now())
+}
+
+model ExchangeRate {
+  id String @id @default(cuid())
+
+  currencyId String
+
+  currency Currency @relation(fields: [currencyId], references: [id])
+
+  date DateTime
+
+  rate Float // 1 Foreign Currency = X INR
+
+  createdAt DateTime @default(now())
+
+  @@unique([currencyId, date])
+}
+
+model Employee {
+  id String @id @default(cuid())
+
+  employeeCode String @unique
+
+  name String
+
+  email String?
+
+  phone String?
+
+  designation String?
+
+  department String?
+
+  dateOfJoining DateTime
+  dateOfLeaving DateTime?
+
+  // Bank Details
+  bankName      String?
+  accountNumber String?
+  ifscCode      String?
+
+  // Statutory Details
+  panNumber    String?
+  aadharNumber String?
+  uanNumber    String?
+  esiNumber    String?
+
+  salaryStructureId String?
+
+  salaryStructure SalaryStructure? @relation(fields: [salaryStructureId], references: [id])
+
+  salarySlips   SalarySlip[]
+  attendance    AttendanceEntry[]
+  salaryDetails EmployeeSalaryDetail[]
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+}
+
+model SalaryStructure {
+  id String @id @default(cuid())
+
+  name String
+
+  basicSalary Float
+
+  hra Float @default(0)
+
+  conveyance Float @default(0)
+
+  medicalAllowance Float @default(0)
+
+  otherAllowances Float @default(0)
+
+  pf Float @default(0)
+
+  esi Float @default(0)
+
+  professionalTax Float @default(0)
+
+  employees Employee[]
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+}
+
+model EWayBill {
+  id String @id @default(cuid())
+
+  ewayBillNumber String @unique
+
+  voucherId String
+
+  voucher Voucher @relation(fields: [voucherId], references: [id])
+
+  transporterId String?
+
+  vehicleNumber String?
+
+  distance Float?
+
+  generatedDate DateTime
+
+  validUntil DateTime
+
+  status String // Generated, Cancelled
+
+  createdAt DateTime @default(now())
+}
+
+// Godown (Warehouse) Models
+model Godown {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  location String?
+
+  // Hierarchy Support
+  parentId String?
+  parent   Godown?  @relation("GodownHierarchy", fields: [parentId], references: [id])
+  children Godown[] @relation("GodownHierarchy")
+
+  stockMovements StockMovement[]
+  voucherItems   VoucherItem[]
+  transfersFrom  StockTransfer[] @relation("FromGodown")
+  transfersTo    StockTransfer[] @relation("ToGodown")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StockTransfer {
+  id             String   @id @default(cuid())
+  transferNumber String   @unique
+  date           DateTime
+
+  fromGodownId String
+  fromGodown   Godown @relation("FromGodown", fields: [fromGodownId], references: [id])
+
+  toGodownId String
+  toGodown   Godown @relation("ToGodown", fields: [toGodownId], references: [id])
+
+  items  StockTransferItem[]
+  status String              @default("PENDING") // PENDING, COMPLETED
+
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+}
+
+model StockTransferItem {
+  id         String        @id @default(cuid())
+  transferId String
+  transfer   StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   InventoryItem @relation("TransferItems", fields: [itemId], references: [id])
+
+  quantity    Float
+  batchNumber String?
+}
+
+// ============================================
+// LICENSING & SYSTEM SECURITY
+// ============================================
+
+model License {
+  id         String @id @default(cuid())
+  key        String @unique
+  clientName String
+  status     String @default("PENDING") // PENDING, ACTIVE, REVOKED
+  plan       String @default("PRO") // PRO, ENTERPRISE
+
+  activatedAt DateTime?
+  expiresAt   DateTime?
+
+  // Machine ID / Hardlock (Optional future proofing)
+  machineId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// MULTI-TENANT SAAS MANAGEMENT
+// ============================================
+
+model Tenant {
+  id               String    @id @default(cuid())
+  name             String
+  subdomain        String?   @unique
+  subscriptionPlan String
+  maxUsers         Int       @default(5)
+  enabledModules   String
+  status           String    @default("ACTIVE")
+  licenseKey       String?   @unique
+  expiresAt        DateTime?
+  dbInitialized    Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  rbacConfig       RBACConfig?
+  provisioningJobs ProvisioningJob[]
+}
+
+model RBACConfig {
+  id          String   @id @default(cuid())
+  tenantId    String   @unique
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ProvisioningJob {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status         String
+  currentStep    String?
+  progress       Int       @default(0)
+  totalSteps     Int       @default(7)
+  completedSteps Int       @default(0)
+  steps          String
+  error          String?
+  createdAt      DateTime  @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+}
+
+// ============================================
+// STANDALONE ADMIN CONTROL PANEL
+// ============================================
+
+model AdminUser {
+  id        String    @id @default(cuid())
+  username  String    @unique
+  email     String    @unique
+  password  String
+  role      String    @default("admin")
+  isActive  Boolean   @default(true)
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Client {
+  id String @id @default(cuid())
+
+  companyName    String
+  tradeName      String?
+  registrationNo String?
+
+  pan   String?
+  gstin String?
+  tan   String?
+  cin   String?
+
+  email          String
+  phone          String
+  alternatePhone String?
+  website        String?
+
+  address String
+  city    String
+  state   String
+  pincode String
+  country String @default("India")
+
+  businessType   String
+  industryType   String?
+  annualTurnover Float?
+
+  subscriptionPlan  String
+  subscriptionStart DateTime
+  subscriptionEnd   DateTime?
+  maxUsers          Int       @default(5)
+  enabledModules    String
+
+  licenseKey    String? @unique
+  licenseStatus String  @default("ACTIVE")
+
+  kycStatus     String    @default("PENDING")
+  kycDocuments  String?
+  kycVerifiedAt DateTime?
+  kycVerifiedBy String?
+
+  billingEmail   String?
+  billingAddress String?
+  gstTreatment   String?
+
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users ClientUser[]
+}
+
+model ClientUser {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  name         String
+  email        String @unique
+  role         String @default("user")
+  moduleAccess String
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, email])
+  @@index([clientId])
+}

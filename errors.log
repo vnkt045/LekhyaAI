@@ -1,0 +1,64 @@
+﻿src/app/api/banking/pdc/route.ts(29,30): error TS2353: Object literal may only specify known properties, and 'amount' does not exist in type 'VoucherEntryWhereInput'.
+src/app/api/banking/pdc/route.ts(46,26): error TS2339: Property 'entries' does not exist on type '{ voucherType: string; currency: string; exchangeRate: number; id: string; createdAt: Date; updatedAt: Date; narration: string; date: Date; voucherNumber: string; totalDebit: number; ... 9 more ...; isRecurring: boolean; }'.
+src/app/api/banking/pdc/route.ts(46,39): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/api/import/tally/route.ts(94,32): error TS18048: 'session.user' is possibly 'undefined'.
+src/app/api/import/tally/route.ts(94,45): error TS2339: Property 'id' does not exist on type '{ name?: string | null | undefined; email?: string | null | undefined; image?: string | null | undefined; }'.
+src/app/api/inventory/stock-transfer/route.ts(137,13): error TS2353: Object literal may only specify known properties, and 'userId' does not exist in type 'AuditLogParams'.
+src/app/api/inventory/stock-transfer/route.ts(245,13): error TS2353: Object literal may only specify known properties, and 'userId' does not exist in type 'AuditLogParams'.
+src/app/api/manufacturing/bom/route.ts(80,13): error TS2353: Object literal may only specify known properties, and 'userId' does not exist in type 'AuditLogParams'.
+src/app/api/manufacturing/bom/route.ts(150,13): error TS2353: Object literal may only specify known properties, and 'userId' does not exist in type 'AuditLogParams'.
+src/app/api/manufacturing/bom/route.ts(200,13): error TS2353: Object literal may only specify known properties, and 'userId' does not exist in type 'AuditLogParams'.
+src/app/api/manufacturing/production/route.ts(141,13): error TS2353: Object literal may only specify known properties, and 'userId' does not exist in type 'AuditLogParams'.
+src/app/api/masters/exchange-rates/route.ts(81,13): error TS2353: Object literal may only specify known properties, and 'userId' does not exist in type 'AuditLogParams'.
+src/app/api/masters/exchange-rates/route.ts(130,13): error TS2353: Object literal may only specify known properties, and 'userId' does not exist in type 'AuditLogParams'.
+src/app/api/masters/exchange-rates/route.ts(176,13): error TS2353: Object literal may only specify known properties, and 'userId' does not exist in type 'AuditLogParams'.
+src/app/api/payroll/salary-slips/route.ts(30,25): error TS2353: Object literal may only specify known properties, and 'code' does not exist in type 'EmployeeSelect<DefaultArgs>'.
+src/app/api/payroll/salary-slips/route.ts(99,17): error TS2353: Object literal may only specify known properties, and 'basicSalary' does not exist in type '(Without<SalarySlipCreateInput, SalarySlipUncheckedCreateInput> & SalarySlipUncheckedCreateInput) | (Without<...> & SalarySlipCreateInput)'.
+src/app/api/payroll/salary-slips/route.ts(112,17): error TS2353: Object literal may only specify known properties, and 'salaryDetails' does not exist in type 'SalarySlipInclude<DefaultArgs>'.
+src/app/api/reports/cash-flow/route.ts(31,41): error TS2339: Property 'accountGroup' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+src/app/api/reports/cash-flow/route.ts(43,32): error TS7006: Parameter 'g' implicitly has an 'any' type.
+src/app/api/reports/cash-flow/route.ts(44,32): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/app/api/reports/cash-flow/route.ts(50,43): error TS2353: Object literal may only specify known properties, and 'mode' does not exist in type 'StringFilter<"Account">'.
+src/app/api/tds/form27q/route.ts(50,46): error TS2339: Property 'number' does not exist on type '{ voucherType: string; currency: string; exchangeRate: number; id: string; createdAt: Date; updatedAt: Date; narration: string; date: Date; voucherNumber: string; totalDebit: number; ... 9 more ...; isRecurring: boolean; }'.
+src/app/masters/ledger/create/page.tsx(27,9): error TS1117: An object literal cannot have multiple properties with the same name.
+src/components/AnalyticsChart.tsx(61,37): error TS2322: Type '(value: number) => [string, ""]' is not assignable to type 'Formatter<number, "">'.
+  Types of parameters 'value' and 'value' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/components/AnalyticsChart.tsx(86,79): error TS18048: 'percent' is possibly 'undefined'.
+src/components/AnalyticsChart.tsx(93,37): error TS2322: Type '(value: number) => [string, ""]' is not assignable to type 'Formatter<number, "">'.
+  Types of parameters 'value' and 'value' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/components/BalanceSheetPDF.tsx(111,48): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: PropsWithChildren<TextProps> | SVGTextProps): Text', gave the following error.
+    Type 'false | { fontWeight: string; }' is not assignable to type 'Style'.
+      Type 'boolean' is not assignable to type 'Style'.
+        Type 'boolean' is not assignable to type 'MediaQueryStyle'.
+  Overload 2 of 2, '(props: PropsWithChildren<TextProps> | SVGTextProps, context: any): Text', gave the following error.
+    Type 'false | { fontWeight: string; }' is not assignable to type 'Style'.
+      Type 'boolean' is not assignable to type 'Style'.
+        Type 'boolean' is not assignable to type 'MediaQueryStyle'.
+src/components/ProfitLossPDF.tsx(115,48): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: PropsWithChildren<TextProps> | SVGTextProps): Text', gave the following error.
+    Type 'false | { fontWeight: string; }' is not assignable to type 'Style'.
+      Type 'boolean' is not assignable to type 'Style'.
+        Type 'boolean' is not assignable to type 'MediaQueryStyle'.
+  Overload 2 of 2, '(props: PropsWithChildren<TextProps> | SVGTextProps, context: any): Text', gave the following error.
+    Type 'false | { fontWeight: string; }' is not assignable to type 'Style'.
+      Type 'boolean' is not assignable to type 'Style'.
+        Type 'boolean' is not assignable to type 'MediaQueryStyle'.
+src/lib/pdf-utils.ts(27,56): error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+src/lib/pdf-utils.ts(27,75): error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+src/lib/pdf-utils.ts(28,56): error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+src/lib/pdf-utils.ts(28,75): error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+src/lib/pdf-utils.ts(67,5): error TS2322: Type 'string' is not assignable to type 'number'.
+src/lib/pdf-utils.ts(68,24): error TS2339: Property 'split' does not exist on type 'number'.
+src/lib/pdf-utils.ts(84,48): error TS2345: Argument of type 'number' is not assignable to parameter of type 'string'.
+src/lib/provisioning.ts(76,17): error TS2322: Type 'ProvisioningStep[]' is not assignable to type 'string | StringFieldUpdateOperationsInput | undefined'.
+src/lib/provisioning.ts(110,25): error TS2322: Type 'string[]' is not assignable to type 'string | StringFieldUpdateOperationsInput | undefined'.
+src/lib/provisioning.ts(132,25): error TS2322: Type '{ admin: { [k: string]: string[]; }; user: { [k: string]: string[]; }; viewer: { [k: string]: string[]; }; }' is not assignable to type 'string'.
+src/lib/provisioning.ts(249,13): error TS2322: Type 'string[]' is not assignable to type 'string'.
+src/lib/provisioning.ts(259,13): error TS2322: Type 'never[]' is not assignable to type 'string'.
+src/lib/reports.ts(36,31): error TS2724: '"D:/AntiGravity_Projects/LekhyaAI/lekhya-ai/node_modules/.prisma/client/index".Prisma' has no exported member named 'JournalEntryWhereInput'. Did you mean 'VoucherEntryWhereInput'?
+src/lib/reports.ts(40,35): error TS2339: Property 'journalEntry' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
