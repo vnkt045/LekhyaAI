@@ -3,15 +3,19 @@ import { db } from '@/lib/db';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
+// GET /api/tcs/configs
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const configs = await db.tCSConfig.findMany({
-            where: { isActive: true },
+            where: {
+                isActive: true,
+                companyId: session.user.companyId!
+            },
             orderBy: { goodsType: 'asc' }
         });
 
@@ -22,17 +26,31 @@ export async function GET(req: Request) {
     }
 }
 
+// POST /api/tcs/configs
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const body = await req.json();
 
+        // Check for duplicates in company
+        const existing = await db.tCSConfig.findFirst({
+            where: {
+                goodsType: body.goodsType,
+                companyId: session.user.companyId!
+            }
+        });
+
+        if (existing) {
+            return NextResponse.json({ error: 'TCS Config for this Goods Type already exists' }, { status: 400 });
+        }
+
         const config = await db.tCSConfig.create({
             data: {
+                companyId: session.user.companyId!,
                 goodsType: body.goodsType,
                 description: body.description,
                 threshold: parseFloat(body.threshold),

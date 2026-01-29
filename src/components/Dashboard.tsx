@@ -94,8 +94,31 @@ export default function Dashboard() {
                     </div>
 
                     {/* Dashboard Graphs / Stats Area */}
-                    <div className="mt-8 h-48 bg-slate-50 border border-gray-200 p-0 flex flex-col rounded-sm overflow-hidden">
+                    <div className="mt-8 h-48 bg-slate-50 border border-gray-200 p-0 flex flex-col rounded-sm overflow-hidden mb-8">
                         <AIInsightsWidget />
+                    </div>
+
+                    {/* QUICK ACTIONS */}
+                    <div>
+                        <h3 className="text-lekhya-text text-sm font-bold uppercase mb-4">Quick Actions</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Link href="/vouchers/new?type=Journal" className="bg-lekhya-accent text-white p-4 rounded-md shadow hover:bg-opacity-90 transition-colors flex flex-col items-center justify-center text-center">
+                                <span className="text-lg font-bold mb-1">+ Journal</span>
+                                <span className="text-xs opacity-80">Double Entry Adjustment</span>
+                            </Link>
+                            <Link href="/vouchers/new?type=Sales" className="bg-white border border-gray-200 text-lekhya-dark p-4 rounded-md shadow-sm hover:border-lekhya-accent transition-colors flex flex-col items-center justify-center text-center">
+                                <span className="font-bold mb-1">+ Sales</span>
+                                <span className="text-xs text-slate-500">Create Invoice</span>
+                            </Link>
+                            <Link href="/vouchers/new?type=Purchase" className="bg-white border border-gray-200 text-lekhya-dark p-4 rounded-md shadow-sm hover:border-lekhya-accent transition-colors flex flex-col items-center justify-center text-center">
+                                <span className="font-bold mb-1">+ Purchase</span>
+                                <span className="text-xs text-slate-500">Record Bill</span>
+                            </Link>
+                            <Link href="/vouchers/new?type=Payment" className="bg-white border border-gray-200 text-lekhya-dark p-4 rounded-md shadow-sm hover:border-lekhya-accent transition-colors flex flex-col items-center justify-center text-center">
+                                <span className="font-bold mb-1">+ Payment</span>
+                                <span className="text-xs text-slate-500">Make Payment</span>
+                            </Link>
+                        </div>
                     </div>
                 </div>
 

@@ -7,12 +7,13 @@ import { logAudit } from '@/lib/audit';
 // GET /api/masters/godowns - Fetch all godowns
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const godowns = await db.godown.findMany({
+            where: { companyId: session.user.companyId! },
             include: {
                 parent: true,
                 children: true,
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
 // POST /api/masters/godowns - Create new godown
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -47,9 +48,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Godown name is required' }, { status: 400 });
         }
 
-        // Check for duplicate name
-        const existing = await db.godown.findUnique({
-            where: { name: body.name }
+        // Check for duplicate name in company
+        const existing = await db.godown.findFirst({
+            where: {
+                name: body.name,
+                companyId: session.user.companyId!
+            }
         });
 
         if (existing) {
@@ -58,6 +62,7 @@ export async function POST(req: Request) {
 
         const godown = await db.godown.create({
             data: {
+                companyId: session.user.companyId!,
                 name: body.name,
                 location: body.location || null,
                 parentId: body.parentId || null
@@ -86,7 +91,7 @@ export async function POST(req: Request) {
 // PUT /api/masters/godowns - Update godown
 export async function PUT(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -98,14 +103,22 @@ export async function PUT(req: Request) {
             return NextResponse.json({ error: 'Godown ID is required' }, { status: 400 });
         }
 
-        const oldGodown = await db.godown.findUnique({ where: { id } });
+        const oldGodown = await db.godown.findFirst({
+            where: { id, companyId: session.user.companyId! }
+        });
+
         if (!oldGodown) {
             return NextResponse.json({ error: 'Godown not found' }, { status: 404 });
         }
 
         // Check for duplicate name (excluding current godown)
         if (name && name !== oldGodown.name) {
-            const existing = await db.godown.findUnique({ where: { name } });
+            const existing = await db.godown.findFirst({
+                where: {
+                    name,
+                    companyId: session.user.companyId!
+                }
+            });
             if (existing) {
                 return NextResponse.json({ error: 'Godown with this name already exists' }, { status: 400 });
             }
@@ -143,7 +156,7 @@ export async function PUT(req: Request) {
 // DELETE /api/masters/godowns - Delete godown
 export async function DELETE(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -155,8 +168,8 @@ export async function DELETE(req: Request) {
             return NextResponse.json({ error: 'Godown ID is required' }, { status: 400 });
         }
 
-        const godown = await db.godown.findUnique({
-            where: { id },
+        const godown = await db.godown.findFirst({
+            where: { id, companyId: session.user.companyId! },
             include: {
                 stockMovements: true,
                 voucherItems: true

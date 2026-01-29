@@ -7,7 +7,7 @@ import { logAudit } from '@/lib/audit';
 // GET /api/payroll/salary-slips - Fetch salary slips
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -17,7 +17,9 @@ export async function GET(req: Request) {
         const month = searchParams.get('month');
         const year = searchParams.get('year');
 
-        const where: any = {};
+        const where: any = {
+            companyId: session.user.companyId!
+        };
         if (employeeId) where.employeeId = employeeId;
         if (month) where.month = parseInt(month);
         if (year) where.year = parseInt(year);
@@ -54,7 +56,7 @@ export async function GET(req: Request) {
 // POST /api/payroll/salary-slips - Generate salary slip
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -69,6 +71,7 @@ export async function POST(req: Request) {
         // Check for duplicate
         const existing = await db.salarySlip.findFirst({
             where: {
+                companyId: session.user.companyId!,
                 employeeId,
                 month: parseInt(month),
                 year: parseInt(year)
@@ -93,6 +96,7 @@ export async function POST(req: Request) {
         // Create salary slip
         const salarySlip = await db.salarySlip.create({
             data: {
+                companyId: session.user.companyId!,
                 employeeId,
                 month: parseInt(month),
                 year: parseInt(year),
@@ -136,7 +140,7 @@ export async function POST(req: Request) {
 // DELETE /api/payroll/salary-slips - Delete salary slip
 export async function DELETE(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -148,8 +152,11 @@ export async function DELETE(req: Request) {
             return NextResponse.json({ error: 'Salary slip ID is required' }, { status: 400 });
         }
 
-        const salarySlip = await db.salarySlip.findUnique({
-            where: { id },
+        const salarySlip = await db.salarySlip.findFirst({
+            where: {
+                id,
+                companyId: session.user.companyId!
+            },
             include: { employee: true }
         });
 

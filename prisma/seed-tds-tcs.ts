@@ -4,6 +4,26 @@ const prisma = new PrismaClient();
 async function seedTDSSections() {
     console.log('Seeding TDS Sections...');
 
+    // Find or create company
+    let company = await prisma.company.findFirst();
+    if (!company) {
+        company = await prisma.company.create({
+            data: {
+                name: 'Demo Company TDS',
+                email: 'admin-tds@lekhyaai.com',
+                financialYearStart: new Date('2024-04-01'),
+                financialYearEnd: new Date('2025-03-31'),
+                address: '123 TDS Street',
+                city: 'TDS City',
+                state: 'TDS State',
+                pincode: '000000',
+                phone: '0000000000'
+            }
+        });
+    }
+    const companyId = company.id;
+    console.log(`Using Company: ${company.name} (${companyId})`);
+
     const tdsSections = [
         {
             section: '194Q',
@@ -56,10 +76,17 @@ async function seedTDSSections() {
     ];
 
     for (const section of tdsSections) {
+        // Need compound unique identifier if scoped by company
+        // Assuming unique constraint is [companyId, section]
         await prisma.tDSSection.upsert({
-            where: { section: section.section },
-            update: section,
-            create: section
+            where: {
+                companyId_section: {
+                    companyId: companyId,
+                    section: section.section
+                }
+            },
+            update: { ...section, companyId },
+            create: { ...section, companyId }
         });
     }
 
@@ -68,6 +95,10 @@ async function seedTDSSections() {
 
 async function seedTCSConfigs() {
     console.log('Seeding TCS Configurations...');
+
+    let company = await prisma.company.findFirst();
+    if (!company) throw new Error("No company found for TCS Seeding");
+    const companyId = company.id;
 
     const tcsConfigs = [
         {
@@ -116,9 +147,14 @@ async function seedTCSConfigs() {
 
     for (const config of tcsConfigs) {
         await prisma.tCSConfig.upsert({
-            where: { goodsType: config.goodsType },
-            update: config,
-            create: config
+            where: {
+                companyId_goodsType: {
+                    companyId: companyId,
+                    goodsType: config.goodsType
+                }
+            },
+            update: { ...config, companyId },
+            create: { ...config, companyId }
         });
     }
 

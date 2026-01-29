@@ -6,12 +6,13 @@ import { authOptions } from '@/lib/auth';
 // GET /api/inventory/units - Fetch all units of measure
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const units = await db.unitOfMeasure.findMany({
+            where: { companyId: session.user.companyId! },
             orderBy: { name: 'asc' }
         });
 
@@ -25,15 +26,28 @@ export async function GET(req: Request) {
 // POST /api/inventory/units - Create new unit
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const body = await req.json();
 
+        // Check for duplicates
+        const existing = await db.unitOfMeasure.findFirst({
+            where: {
+                name: body.name,
+                companyId: session.user.companyId!
+            }
+        });
+
+        if (existing) {
+            return NextResponse.json({ error: 'Unit already exists' }, { status: 400 });
+        }
+
         const unit = await db.unitOfMeasure.create({
             data: {
+                companyId: session.user.companyId!,
                 name: body.name,
                 symbol: body.symbol,
                 decimalPlaces: body.decimalPlaces || 2

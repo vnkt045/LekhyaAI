@@ -6,10 +6,11 @@ import { authOptions } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 
 // GET /api/vouchers - Fetch all vouchers with optional filters
+// GET /api/vouchers - Fetch all vouchers with optional filters
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session || !session.user?.companyId) {
+        return NextResponse.json({ error: 'Unauthorized or No Company Selected' }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -17,8 +18,12 @@ export async function GET(req: Request) {
     const isRecurring = searchParams.get('isRecurring') === 'true';
 
     try {
-        const whereClause: any = search ? {
-            OR: [
+        const whereClause: any = {
+            companyId: session.user.companyId
+        };
+
+        if (search) {
+            whereClause.OR = [
                 { voucherNumber: { contains: search } },
                 { invoiceNumber: { contains: search } },
                 { narration: { contains: search } },
@@ -29,8 +34,8 @@ export async function GET(req: Request) {
                         }
                     }
                 }
-            ]
-        } : {};
+            ];
+        }
 
         if (isRecurring) {
             whereClause.isRecurring = true;
@@ -39,6 +44,7 @@ export async function GET(req: Request) {
         // If search term is a number, try to match amount (optional enhancement)
         const searchAmount = parseFloat(search);
         if (!isNaN(searchAmount)) {
+            if (!whereClause.OR) whereClause.OR = [];
             whereClause.OR.push({ totalDebit: { equals: searchAmount } });
         }
 
@@ -64,8 +70,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session || !session.user?.companyId) {
+        return NextResponse.json({ error: 'Unauthorized or No Company Selected' }, { status: 401 });
     }
 
     try {
@@ -85,6 +91,7 @@ export async function POST(req: Request) {
         // 1. Create the Header
         const voucher = await db.voucher.create({
             data: {
+                companyId: session.user.companyId,
                 voucherNumber: body.number,
                 voucherType: body.type,
                 date: new Date(body.date),
@@ -130,15 +137,15 @@ export async function POST(req: Request) {
                     create: await (async () => {
                         const entries = [];
 
-                        // Default Accounts Lookup
-                        const purchaseAc = await db.account.findFirst({ where: { code: 'PURCHASE' } });
-                        const salesAc = await db.account.findFirst({ where: { code: 'SALES' } });
-                        const cashAc = await db.account.findFirst({ where: { code: 'CASH' } });
+                        // Default Accounts Lookup SCOPED TO COMPANY
+                        const purchaseAc = await db.account.findFirst({ where: { code: 'PURCHASE', companyId: session.user.companyId! } });
+                        const salesAc = await db.account.findFirst({ where: { code: 'SALES', companyId: session.user.companyId! } });
+                        const cashAc = await db.account.findFirst({ where: { code: 'CASH', companyId: session.user.companyId! } });
 
                         // Helper to safely get ID
-                        // Helper to safely get ID
-                        const purchaseId = purchaseAc?.id || body.accountId; // Fallback (unsafe but prevents crash)
-                        const salesId = salesAc?.id || body.accountId;
+                        // Allow user to specify the P&L ledger (e.g. "Raw Material Purchase" vs "General Purchase")
+                        const purchaseId = body.ledgerId || purchaseAc?.id || body.accountId;
+                        const salesId = body.ledgerId || salesAc?.id || body.accountId;
                         const cashId = cashAc?.id || body.accountId;
 
                         // Prepare Allocations Data (If allocations present)
@@ -149,20 +156,36 @@ export async function POST(req: Request) {
                             }))
                         } : undefined;
 
-                        // Logic Separation
+                        // GENERIC DOUBLE ENTRY / JOURNAL MODE
+                        if (body.ledgerEntries && body.ledgerEntries.length > 0) {
+                            return body.ledgerEntries.map((entry: any) => ({
+                                accountId: entry.accountId,
+                                accountName: entry.accountName,
+                                debit: parseFloat(entry.debit) || 0,
+                                credit: parseFloat(entry.credit) || 0,
+                                foreignAmount: entry.foreignAmount || null,
+                                allocations: undefined
+                            }));
+                        }
+
+                        // Logic Separation (Fallbacks for Single Entry Forms)
+                        const calculatedEntries = [];
+
                         if (body.type === 'PURCHASE') {
-                            // Debit Purchase A/c (Expense) - Apply Cost Center Here
-                            entries.push({
+                            if (!purchaseId) throw new Error("Automatic Purchase Ledger resolution failed. Please ensure a Purchase Account exists or is selected.");
+
+                            // Debit Purchase A/c (Expense)
+                            calculatedEntries.push({
                                 accountId: purchaseId,
-                                accountName: purchaseAc?.name || 'Purchase',
+                                accountName: body.ledgerName || purchaseAc?.name || 'Purchase',
                                 debit: baseAmount,
                                 credit: 0,
-                                costCenterId: null, // Deprecated single field? Or use primary? Let's use allocations logic only.
-                                allocations: allocationsData, // Apply allocations
-                                foreignAmount: null // Local currency usually
+                                costCenterId: null,
+                                allocations: allocationsData,
+                                foreignAmount: null
                             });
                             // Credit Party (Liability)
-                            entries.push({
+                            calculatedEntries.push({
                                 accountId: body.accountId,
                                 accountName: body.accountName,
                                 debit: 0,
@@ -170,60 +193,62 @@ export async function POST(req: Request) {
                                 foreignAmount: isForeign ? enteredAmount : null
                             });
                         } else if (body.type === 'SALES') {
+                            if (!salesId) throw new Error("Automatic Sales Ledger resolution failed. Ensure a Sales Account exists.");
+
                             // Debit Party (Asset)
-                            entries.push({
+                            calculatedEntries.push({
                                 accountId: body.accountId,
                                 accountName: body.accountName,
                                 debit: baseAmount,
                                 credit: 0,
                                 foreignAmount: isForeign ? enteredAmount : null
                             });
-                            // Credit Sales A/c (Revenue) - Apply Cost Center Here
-                            entries.push({
+                            // Credit Sales A/c (Revenue)
+                            calculatedEntries.push({
                                 accountId: salesId,
-                                accountName: salesAc?.name || 'Sales',
+                                accountName: body.ledgerName || salesAc?.name || 'Sales',
                                 debit: 0,
                                 credit: baseAmount,
-                                allocations: allocationsData, // Apply allocations
+                                allocations: allocationsData,
                                 foreignAmount: null
                             });
                         } else if (body.type === 'PAYMENT') {
-                            // Debit Party (Usually Expense or Liability) - Apply allocations if this is the expense
-                            // In a simple Payment voucher, 'accountId' is the Debit Account (Expense).
-                            entries.push({
+                            // Debit Party
+                            calculatedEntries.push({
                                 accountId: body.accountId,
                                 accountName: body.accountName,
                                 debit: baseAmount,
                                 credit: 0,
-                                allocations: allocationsData, // Apply to the Debit Entry
+                                allocations: allocationsData,
                                 foreignAmount: isForeign ? enteredAmount : null
                             });
-                            // Credit Cash/Bank (Implicit Cash for now)
-                            entries.push({
-                                accountId: cashId,
+                            // Credit Cash/Bank
+                            calculatedEntries.push({
+                                accountId: cashId!, // Assume cashId found or throw
                                 accountName: cashAc?.name || 'Cash',
                                 debit: 0,
                                 credit: baseAmount
                             });
                         } else if (body.type === 'RECEIPT') {
                             // Debit Cash/Bank
-                            entries.push({
-                                accountId: cashId,
+                            calculatedEntries.push({
+                                accountId: cashId!,
                                 accountName: cashAc?.name || 'Cash',
                                 debit: baseAmount,
                                 credit: 0
                             });
-                            // Credit Party (Income/Asset) - Apply allocations if Income
-                            entries.push({
+                            // Credit Party
+                            calculatedEntries.push({
                                 accountId: body.accountId,
                                 accountName: body.accountName,
                                 debit: 0,
                                 credit: baseAmount,
-                                allocations: allocationsData, // Apply to the Credit Entry
+                                allocations: allocationsData,
                                 foreignAmount: isForeign ? enteredAmount : null
                             });
                         }
-                        return entries;
+
+                        return calculatedEntries;
                     })()
                 }
             }
@@ -285,8 +310,11 @@ export async function POST(req: Request) {
         });
 
         return NextResponse.json(voucher, { status: 201 });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Voucher creation error:', error);
-        return NextResponse.json({ error: 'Failed to create voucher' }, { status: 500 });
+        return NextResponse.json({
+            error: `Failed to create voucher: ${error.message || error}`,
+            details: error
+        }, { status: 500 });
     }
 }

@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { db } from '@/lib/db';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 // GET /api/voucher-types - List all voucher types
 export async function GET() {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user?.companyId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     try {
-        const voucherTypes = await prisma.voucherType.findMany({
+        const voucherTypes = await db.voucherType.findMany({
+            where: { companyId: session.user.companyId! },
             orderBy: [
                 { isSystemDefined: 'desc' }, // System types first
                 { name: 'asc' }
@@ -25,6 +31,11 @@ export async function GET() {
 
 // POST /api/voucher-types - Create new custom voucher type
 export async function POST(request: NextRequest) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user?.companyId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     try {
         const body = await request.json();
 
@@ -36,9 +47,12 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Check if name already exists
-        const existing = await prisma.voucherType.findUnique({
-            where: { name: body.name }
+        // Check if name already exists in this company
+        const existing = await db.voucherType.findFirst({
+            where: {
+                name: body.name,
+                companyId: session.user.companyId!
+            }
         });
 
         if (existing) {
@@ -49,8 +63,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Create new voucher type
-        const voucherType = await prisma.voucherType.create({
+        const voucherType = await db.voucherType.create({
             data: {
+                companyId: session.user.companyId!,
                 name: body.name,
                 abbreviation: body.abbreviation,
                 category: body.category,

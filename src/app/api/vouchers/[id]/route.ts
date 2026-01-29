@@ -15,8 +15,11 @@ export async function GET(
     }
 
     try {
-        const voucher = await db.voucher.findUnique({
-            where: { id: params.id },
+        const voucher = await db.voucher.findFirst({
+            where: {
+                id: params.id,
+                companyId: session.user.companyId!
+            },
             include: {
                 entries: {
                     include: {
@@ -44,16 +47,19 @@ export async function PUT(
 ) {
     const params = await props.params;
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const body = await req.json();
 
-        // Fetch old voucher for audit trail
-        const oldVoucher = await db.voucher.findUnique({
-            where: { id: params.id },
+        // Fetch old voucher for audit trail (AND verify ownership)
+        const oldVoucher = await db.voucher.findFirst({
+            where: {
+                id: params.id,
+                companyId: session.user.companyId!
+            },
             include: {
                 entries: true,
                 items: true
@@ -108,14 +114,17 @@ export async function DELETE(
 ) {
     const params = await props.params;
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
-        // Fetch voucher before deletion for audit trail
-        const voucher = await db.voucher.findUnique({
-            where: { id: params.id },
+        // Fetch voucher before deletion for audit trail (AND verify ownership)
+        const voucher = await db.voucher.findFirst({
+            where: {
+                id: params.id,
+                companyId: session.user.companyId!
+            },
             include: {
                 entries: true,
                 items: true

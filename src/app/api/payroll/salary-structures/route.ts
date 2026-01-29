@@ -6,12 +6,15 @@ import { authOptions } from '@/lib/auth';
 // GET /api/payroll/salary-structures - Fetch all salary structures
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const structures = await db.salaryStructure.findMany({
+            where: {
+                companyId: session.user.companyId!
+            },
             include: {
                 employees: {
                     select: {
@@ -34,7 +37,7 @@ export async function GET(req: Request) {
 // POST /api/payroll/salary-structures - Create new salary structure
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -43,6 +46,7 @@ export async function POST(req: Request) {
 
         const structure = await db.salaryStructure.create({
             data: {
+                companyId: session.user.companyId!,
                 name: body.name,
                 basicSalary: parseFloat(body.basicSalary),
                 hra: parseFloat(body.hra) || 0,

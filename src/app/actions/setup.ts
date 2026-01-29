@@ -111,17 +111,22 @@ export async function completeSetup(prevState: SetupState, formData: FormData) {
             ];
 
             for (const acc of accounts) {
-                await prisma.account.upsert({
-                    where: { code: acc.code },
-                    update: {},
-                    create: acc
+                await prisma.account.create({
+                    data: {
+                        ...acc,
+                        companyId: 'default-company',
+                        isActive: true
+                    }
                 });
             }
         }
 
         // 4. Create Default Godown (Required for inventory)
         await prisma.godown.create({
-            data: { name: 'Main Location' }
+            data: {
+                name: 'Main Location',
+                companyId: 'default-company'
+            }
         });
 
     } catch (e) {

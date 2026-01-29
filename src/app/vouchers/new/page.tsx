@@ -101,17 +101,86 @@ export default function NewVoucherPage() {
 
     const grandTotal = items.reduce((sum, item) => sum + item.totalAmount, 0);
 
+    const [ledgerEntries, setLedgerEntries] = useState([
+        { id: '1', type: 'By', accountId: '', accountName: '', debit: 0, credit: 0 },
+        { id: '2', type: 'To', accountId: '', accountName: '', debit: 0, credit: 0 }
+    ]);
+
+    const isDoubleEntryMode = ['JOURNAL', 'CONTRA'].includes(formData.type);
+
+    const handleLedgerChange = (id: string, field: string, value: any) => {
+        setLedgerEntries(prev => prev.map(entry => {
+            if (entry.id !== id) return entry;
+            const newEntry = { ...entry, [field]: value };
+
+            // Auto-clear opposite field if needed? 
+            // Usually By = Debit, To = Credit
+            if (field === 'type') {
+                // If switched to 'To', move debit to credit?
+            }
+            return newEntry;
+        }));
+    };
+
+    const handleLedgerAccountChange = (id: string, accountId: string) => {
+        const account = accounts.find(a => a.id === accountId);
+        setLedgerEntries(prev => prev.map(entry => {
+            if (entry.id !== id) return entry;
+            return {
+                ...entry,
+                accountId,
+                accountName: account ? account.name : ''
+            };
+        }));
+    };
+
+    const addLedgerEntry = () => {
+        const lastEntry = ledgerEntries[ledgerEntries.length - 1];
+        setLedgerEntries([...ledgerEntries, {
+            id: Math.random().toString(36).substr(2, 9),
+            type: lastEntry.type === 'By' ? 'To' : 'By', // Alternate defaults
+            accountId: '',
+            accountName: '',
+            debit: 0,
+            credit: 0
+        }]);
+    };
+
+    const removeLedgerEntry = (id: string) => {
+        if (ledgerEntries.length <= 2) return;
+        setLedgerEntries(prev => prev.filter(e => e.id !== id));
+    };
+
+    const totalDebit = ledgerEntries.reduce((sum, e) => sum + (e.type === 'By' ? e.debit : 0), 0);
+    const totalCredit = ledgerEntries.reduce((sum, e) => sum + (e.type === 'To' ? e.credit : 0), 0);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
 
-        const payload = {
-            ...formData,
-            amount: grandTotal,
-            items: items.map(({ id, ...rest }) => rest)
-        };
-
         try {
+            let payload: any = { ...formData };
+
+            if (isDoubleEntryMode) {
+                // Validation
+                if (Math.abs(totalDebit - totalCredit) > 0.01) {
+                    throw new Error(`Debit (${totalDebit}) and Credit (${totalCredit}) must match! Diff: ${totalDebit - totalCredit}`);
+                }
+
+                // Map to API Interface
+                payload.amount = totalDebit; // Total Value
+                payload.ledgerEntries = ledgerEntries.map(e => ({
+                    accountId: e.accountId,
+                    accountName: e.accountName,
+                    debit: e.type === 'By' ? e.debit : 0,
+                    credit: e.type === 'To' ? e.credit : 0
+                }));
+            } else {
+                // Existing Item Invoice Logic
+                payload.amount = grandTotal;
+                payload.items = items.map(({ id, ...rest }) => rest);
+            }
+
             const res = await apiPost('/api/vouchers', payload);
 
             if (res.error) throw new Error(res.error);
@@ -132,7 +201,9 @@ export default function NewVoucherPage() {
                     <Link href="/vouchers" className="hover:bg-white/10 p-1.5 rounded-full transition-colors">
                         <ArrowLeft className="w-5 h-5 text-lekhya-accent" />
                     </Link>
-                    <h1 className="text-lg font-bold tracking-wide">Create Invoice</h1>
+                    <h1 className="text-lg font-bold tracking-wide">
+                        {isDoubleEntryMode ? 'Accounting Voucher' : 'Create Invoice'}
+                    </h1>
                 </div>
                 <div className="text-xs text-white/50 font-mono">LekhyaAI</div>
             </header>
@@ -141,7 +212,7 @@ export default function NewVoucherPage() {
                 <form onSubmit={handleSubmit} className="bg-white rounded-sm shadow-sm border border-[#BDCDD6] overflow-hidden max-w-7xl mx-auto">
                     {/* Header Details */}
                     <div className="bg-[#F8FAFC] px-8 py-4 border-b border-[#E2E8F0]">
-                        <h2 className="text-lekhya-primary font-bold text-sm uppercase tracking-wide">Invoice Details</h2>
+                        <h2 className="text-lekhya-primary font-bold text-sm uppercase tracking-wide">Voucher Details</h2>
                     </div>
 
                     <div className="p-6 space-y-6">
@@ -159,6 +230,7 @@ export default function NewVoucherPage() {
                                     <option value="PAYMENT">Payment</option>
                                     <option value="RECEIPT">Receipt</option>
                                     <option value="JOURNAL">Journal</option>
+                                    <option value="CONTRA">Contra</option>
                                 </select>
                             </div>
                             <div>
@@ -171,32 +243,37 @@ export default function NewVoucherPage() {
                                     required
                                 />
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-lekhya-primary uppercase mb-1 required-label">Party Account</label>
-                                <select
-                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-lekhya-accent bg-yellow-50/50"
-                                    value={formData.accountId}
-                                    onChange={(e) => {
-                                        const selected = accounts.find(a => a.id === e.target.value);
-                                        setFormData({
-                                            ...formData,
-                                            accountId: e.target.value,
-                                            accountName: selected ? selected.name : ''
-                                        });
-                                    }}
-                                    required
-                                >
-                                    <option value="">Select Account...</option>
-                                    {accounts.map(acc => (
-                                        <option key={acc.id} value={acc.id}>{acc.name}</option>
-                                    ))}
-                                </select>
-                            </div>
+
+                            {!isDoubleEntryMode && (
+                                <div>
+                                    <label className="block text-xs font-bold text-lekhya-primary uppercase mb-1 required-label">Party Account</label>
+                                    <select
+                                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-lekhya-accent bg-yellow-50/50"
+                                        value={formData.accountId}
+                                        onChange={(e) => {
+                                            const selected = accounts.find(a => a.id === e.target.value);
+                                            setFormData({
+                                                ...formData,
+                                                accountId: e.target.value,
+                                                accountName: selected ? selected.name : ''
+                                            });
+                                        }}
+                                        required
+                                    >
+                                        <option value="">Select Account...</option>
+                                        {accounts.map(acc => (
+                                            <option key={acc.id} value={acc.id}>{acc.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
 
                         {/* Invoice Number */}
                         <div className="max-w-md">
-                            <label className="block text-xs font-bold text-lekhya-primary uppercase mb-1">Invoice Number (Optional)</label>
+                            <label className="block text-xs font-bold text-lekhya-primary uppercase mb-1">
+                                {isDoubleEntryMode ? 'Voucher Number (Optional)' : 'Invoice Number (Optional)'}
+                            </label>
                             <input
                                 type="text"
                                 className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-lekhya-accent"
@@ -206,130 +283,221 @@ export default function NewVoucherPage() {
                             />
                         </div>
 
-                        {/* Items Grid */}
-                        <div className="mt-8 border border-gray-300 rounded-sm overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-xs">
+                        {/* =========================================
+                            DOUBLE ENTRY JOURNAL GRID
+                           ========================================= */}
+                        {isDoubleEntryMode ? (
+                            <div className="mt-8 border border-gray-300 rounded-sm overflow-hidden">
+                                <table className="w-full text-sm">
                                     <thead className="bg-[#E0E8F0] text-lekhya-primary font-bold border-b border-gray-300">
                                         <tr>
-                                            <th className="px-2 py-2 text-left w-10">#</th>
-                                            <th className="px-2 py-2 text-left w-48">Product/Service</th>
-                                            <th className="px-2 py-2 text-left w-24">HSN/SAC</th>
-                                            <th className="px-2 py-2 text-right w-20">Qty</th>
-                                            <th className="px-2 py-2 text-right w-24">Rate</th>
-                                            <th className="px-2 py-2 text-left w-16">Per</th>
-                                            <th className="px-2 py-2 text-right w-32">Amount</th>
-                                            <th className="px-2 py-2 text-right w-16">CGST %</th>
-                                            <th className="px-2 py-2 text-right w-16">SGST %</th>
-                                            <th className="px-2 py-2 text-right w-16">IGST %</th>
-                                            <th className="px-2 py-2 text-right w-32">Total</th>
+                                            <th className="px-4 py-2 text-left w-20">By/To</th>
+                                            <th className="px-4 py-2 text-left">Particulars (Account)</th>
+                                            <th className="px-4 py-2 text-right w-40">Debit</th>
+                                            <th className="px-4 py-2 text-right w-40">Credit</th>
                                             <th className="px-2 py-2 w-10"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200 bg-white">
-                                        {items.map((item, idx) => (
-                                            <tr key={item.id} className="group hover:bg-blue-50">
-                                                <td className="px-2 py-1 text-center text-slate-500">{idx + 1}</td>
-                                                <td className="px-2 py-1">
-                                                    <input
-                                                        type="text"
-                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded"
-                                                        placeholder="Item Name"
-                                                        value={item.productName}
-                                                        onChange={(e) => handleItemChange(item.id, 'productName', e.target.value)}
-                                                    />
+                                        {ledgerEntries.map((entry) => (
+                                            <tr key={entry.id} className="group hover:bg-blue-50">
+                                                <td className="px-4 py-2">
+                                                    <select
+                                                        className="w-full bg-transparent font-bold text-lekhya-primary focus:outline-none"
+                                                        value={entry.type}
+                                                        onChange={(e) => handleLedgerChange(entry.id, 'type', e.target.value)}
+                                                    >
+                                                        <option value="By">By (Dr)</option>
+                                                        <option value="To">To (Cr)</option>
+                                                    </select>
                                                 </td>
-                                                <td className="px-2 py-1">
-                                                    <input
-                                                        type="text"
-                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-center"
-                                                        value={item.hsnSac}
-                                                        onChange={(e) => handleItemChange(item.id, 'hsnSac', e.target.value)}
-                                                    />
+                                                <td className="px-4 py-2">
+                                                    <select
+                                                        className="w-full bg-transparent border-b border-transparent focus:border-lekhya-accent focus:outline-none"
+                                                        value={entry.accountId}
+                                                        onChange={(e) => handleLedgerAccountChange(entry.id, e.target.value)}
+                                                    >
+                                                        <option value="">Select Ledger...</option>
+                                                        {accounts.map(acc => (
+                                                            <option key={acc.id} value={acc.id}>{acc.name}</option>
+                                                        ))}
+                                                    </select>
                                                 </td>
-                                                <td className="px-2 py-1">
-                                                    <input
-                                                        type="number"
-                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right font-medium"
-                                                        value={item.qty || ''}
-                                                        onChange={(e) => handleItemChange(item.id, 'qty', parseFloat(e.target.value) || 0)}
-                                                    />
+                                                <td className="px-4 py-2">
+                                                    {entry.type === 'By' && (
+                                                        <input
+                                                            type="number"
+                                                            className="w-full text-right bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary rounded"
+                                                            value={entry.debit || ''}
+                                                            onChange={(e) => handleLedgerChange(entry.id, 'debit', parseFloat(e.target.value))}
+                                                        />
+                                                    )}
                                                 </td>
-                                                <td className="px-2 py-1">
-                                                    <input
-                                                        type="number"
-                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right font-medium"
-                                                        value={item.rate || ''}
-                                                        onChange={(e) => handleItemChange(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                                                    />
+                                                <td className="px-4 py-2">
+                                                    {entry.type === 'To' && (
+                                                        <input
+                                                            type="number"
+                                                            className="w-full text-right bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary rounded"
+                                                            value={entry.credit || ''}
+                                                            onChange={(e) => handleLedgerChange(entry.id, 'credit', parseFloat(e.target.value))}
+                                                        />
+                                                    )}
                                                 </td>
-                                                <td className="px-2 py-1">
-                                                    <input
-                                                        type="text"
-                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded"
-                                                        value={item.per}
-                                                        onChange={(e) => handleItemChange(item.id, 'per', e.target.value)}
-                                                    />
-                                                </td>
-                                                <td className="px-2 py-1 text-right font-mono text-slate-700 px-1">
-                                                    {item.taxableAmount.toFixed(2)}
-                                                </td>
-                                                <td className="px-2 py-1">
-                                                    <input
-                                                        type="number"
-                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right text-xs"
-                                                        value={item.cgstRate || ''}
-                                                        onChange={(e) => handleItemChange(item.id, 'cgstRate', parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </td>
-                                                <td className="px-2 py-1">
-                                                    <input
-                                                        type="number"
-                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right text-xs"
-                                                        value={item.sgstRate || ''}
-                                                        onChange={(e) => handleItemChange(item.id, 'sgstRate', parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </td>
-                                                <td className="px-2 py-1">
-                                                    <input
-                                                        type="number"
-                                                        className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right text-xs"
-                                                        value={item.igstRate || ''}
-                                                        onChange={(e) => handleItemChange(item.id, 'igstRate', parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </td>
-                                                <td className="px-2 py-1 text-right font-bold font-mono text-lekhya-primary">
-                                                    {item.totalAmount.toFixed(2)}
-                                                </td>
-                                                <td className="px-2 py-1 text-center">
-                                                    <button type="button" onClick={() => removeItem(item.id)} className="text-slate-300 hover:text-red-500">
-                                                        <Trash2 className="w-3 h-3" />
+                                                <td className="px-2 py-2 text-center">
+                                                    <button type="button" onClick={() => removeLedgerEntry(entry.id)} className="text-slate-300 hover:text-red-500">
+                                                        <Trash2 className="w-4 h-4" />
                                                     </button>
                                                 </td>
                                             </tr>
                                         ))}
                                     </tbody>
-                                    <tfoot className="bg-gray-50 border-t border-gray-300">
+                                    <tfoot className="bg-gray-50 border-t border-gray-300 font-bold">
                                         <tr>
-                                            <td colSpan={10} className="px-4 py-2 text-right font-bold text-slate-600 uppercase">Grand Total</td>
-                                            <td className="px-2 py-2 text-right font-bold text-lg text-lekhya-primary">
-                                                ₹ {grandTotal.toFixed(2)}
-                                            </td>
+                                            <td colSpan={2} className="px-4 py-2 text-right uppercase text-slate-500">Totals</td>
+                                            <td className="px-4 py-2 text-right text-lekhya-primary">₹ {totalDebit.toFixed(2)}</td>
+                                            <td className="px-4 py-2 text-right text-lekhya-primary">₹ {totalCredit.toFixed(2)}</td>
                                             <td></td>
                                         </tr>
                                     </tfoot>
                                 </table>
+                                <div className="p-2 border-t border-gray-200">
+                                    <button
+                                        type="button"
+                                        onClick={addLedgerEntry}
+                                        className="text-xs font-bold text-lekhya-primary hover:underline flex items-center gap-1"
+                                    >
+                                        <Plus className="w-3 h-3" /> Add Entry
+                                    </button>
+                                </div>
                             </div>
-                            <div className="p-2 border-t border-gray-200">
-                                <button
-                                    type="button"
-                                    onClick={addItem}
-                                    className="text-xs font-bold text-lekhya-primary hover:underline flex items-center gap-1"
-                                >
-                                    <Plus className="w-3 h-3" /> Add Item
-                                </button>
+                        ) : (
+                            /* =========================================
+                               EXISTING ITEMS GRID
+                               ========================================= */
+                            <div className="mt-8 border border-gray-300 rounded-sm overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                        <thead className="bg-[#E0E8F0] text-lekhya-primary font-bold border-b border-gray-300">
+                                            <tr>
+                                                <th className="px-2 py-2 text-left w-10">#</th>
+                                                <th className="px-2 py-2 text-left w-48">Product/Service</th>
+                                                <th className="px-2 py-2 text-left w-24">HSN/SAC</th>
+                                                <th className="px-2 py-2 text-right w-20">Qty</th>
+                                                <th className="px-2 py-2 text-right w-24">Rate</th>
+                                                <th className="px-2 py-2 text-left w-16">Per</th>
+                                                <th className="px-2 py-2 text-right w-32">Amount</th>
+                                                <th className="px-2 py-2 text-right w-16">CGST %</th>
+                                                <th className="px-2 py-2 text-right w-16">SGST %</th>
+                                                <th className="px-2 py-2 text-right w-16">IGST %</th>
+                                                <th className="px-2 py-2 text-right w-32">Total</th>
+                                                <th className="px-2 py-2 w-10"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200 bg-white">
+                                            {items.map((item, idx) => (
+                                                <tr key={item.id} className="group hover:bg-blue-50">
+                                                    <td className="px-2 py-1 text-center text-slate-500">{idx + 1}</td>
+                                                    <td className="px-2 py-1">
+                                                        <input
+                                                            type="text"
+                                                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded"
+                                                            placeholder="Item Name"
+                                                            value={item.productName}
+                                                            onChange={(e) => handleItemChange(item.id, 'productName', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-1">
+                                                        <input
+                                                            type="text"
+                                                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-center"
+                                                            value={item.hsnSac}
+                                                            onChange={(e) => handleItemChange(item.id, 'hsnSac', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-1">
+                                                        <input
+                                                            type="number"
+                                                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right font-medium"
+                                                            value={item.qty || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'qty', parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-1">
+                                                        <input
+                                                            type="number"
+                                                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right font-medium"
+                                                            value={item.rate || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'rate', parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-1">
+                                                        <input
+                                                            type="text"
+                                                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded"
+                                                            value={item.per}
+                                                            onChange={(e) => handleItemChange(item.id, 'per', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-1 text-right font-mono text-slate-700 px-1">
+                                                        {item.taxableAmount.toFixed(2)}
+                                                    </td>
+                                                    <td className="px-2 py-1">
+                                                        <input
+                                                            type="number"
+                                                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right text-xs"
+                                                            value={item.cgstRate || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'cgstRate', parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-1">
+                                                        <input
+                                                            type="number"
+                                                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right text-xs"
+                                                            value={item.sgstRate || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'sgstRate', parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-1">
+                                                        <input
+                                                            type="number"
+                                                            className="w-full bg-transparent border-none focus:ring-1 focus:ring-lekhya-primary p-1 rounded text-right text-xs"
+                                                            value={item.igstRate || ''}
+                                                            onChange={(e) => handleItemChange(item.id, 'igstRate', parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-1 text-right font-bold font-mono text-lekhya-primary">
+                                                        {item.totalAmount.toFixed(2)}
+                                                    </td>
+                                                    <td className="px-2 py-1 text-center">
+                                                        <button type="button" onClick={() => removeItem(item.id)} className="text-slate-300 hover:text-red-500">
+                                                            <Trash2 className="w-3 h-3" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="bg-gray-50 border-t border-gray-300">
+                                            <tr>
+                                                <td colSpan={10} className="px-4 py-2 text-right font-bold text-slate-600 uppercase">Grand Total</td>
+                                                <td className="px-2 py-2 text-right font-bold text-lg text-lekhya-primary">
+                                                    ₹ {grandTotal.toFixed(2)}
+                                                </td>
+                                                <td></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                                <div className="p-2 border-t border-gray-200">
+                                    <button
+                                        type="button"
+                                        onClick={addItem}
+                                        className="text-xs font-bold text-lekhya-primary hover:underline flex items-center gap-1"
+                                    >
+                                        <Plus className="w-3 h-3" /> Add Item
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Narration */}
                         <div>

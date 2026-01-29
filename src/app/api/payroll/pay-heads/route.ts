@@ -5,10 +5,13 @@ import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions);
-    if (!session) return new NextResponse('Unauthorized', { status: 401 });
+    if (!session || !session.user?.companyId) return new NextResponse('Unauthorized', { status: 401 });
 
     try {
         const payHeads = await db.payHead.findMany({
+            where: {
+                companyId: session.user.companyId!
+            },
             orderBy: { name: 'asc' }
         });
         return NextResponse.json(payHeads);
@@ -19,7 +22,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
-    if (!session) return new NextResponse('Unauthorized', { status: 401 });
+    if (!session || !session.user?.companyId) return new NextResponse('Unauthorized', { status: 401 });
 
     try {
         const body = await req.json();
@@ -27,6 +30,7 @@ export async function POST(req: NextRequest) {
 
         const newPayHead = await db.payHead.create({
             data: {
+                companyId: session.user.companyId!,
                 name,
                 type,
                 calculationType,

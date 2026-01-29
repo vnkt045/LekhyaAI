@@ -11,7 +11,9 @@ async function main() {
 
     const user = await prisma.user.upsert({
         where: { email: 'admin@lekhyaai.com' },
-        update: {},
+        update: {
+            password: hashedPassword // Ensure password is reset if user exists
+        },
         create: {
             email: 'admin@lekhyaai.com',
             password: hashedPassword,
@@ -19,7 +21,7 @@ async function main() {
         }
     });
 
-    console.log('✅ Created user:', user.email);
+    console.log('✅ Created/Updated user:', user.email);
 
     // Calculate Financial Year Dynamically
     const today = new Date();
@@ -31,21 +33,70 @@ async function main() {
 
     console.log(`📅 Current Financial Year: ${startYear}-${startYear + 1}`);
 
-    // Note: Company setup should be done by user during onboarding
-    // No default company data is seeded
+    // Create Default Company for Seeding
+    const company = await prisma.company.upsert({
+        where: { id: 'demo-company' }, // Fixed ID for seeding
+        update: {},
+        create: {
+            id: 'demo-company',
+            name: 'Demo Company',
+            email: 'admin@lekhyaai.com',
+            financialYearStart: fyStart,
+            financialYearEnd: fyEnd,
+            address: '123 Demo Street',
+            city: 'Demo City',
+            state: 'Demo State',
+            pincode: '123456',
+            phone: '9876543210'
+        }
+    });
+
+    console.log('🏢 Created/Updated Demo Company:', company.name);
+
+    // Link User to Company
+    await prisma.userCompany.upsert({
+        where: {
+            userId_companyId: {
+                userId: user.id,
+                companyId: company.id
+            }
+        },
+        update: {},
+        create: {
+            userId: user.id,
+            companyId: company.id,
+            role: 'admin',
+            isDefault: true
+        }
+    });
+    console.log('🔗 Linked User to Company');
 
     // Create default godown
     await prisma.godown.upsert({
-        where: { name: 'Main Location' },
+        where: {
+            companyId_name: {
+                companyId: company.id,
+                name: 'Main Location'
+            }
+        },
         update: {},
-        create: { name: 'Main Location' }
+        create: {
+            name: 'Main Location',
+            companyId: company.id
+        }
     });
 
     // Create Default Cost Category
     await prisma.costCategory.upsert({
-        where: { name: 'Primary Cost Category' },
+        where: {
+            companyId_name: {
+                companyId: company.id,
+                name: 'Primary Cost Category'
+            }
+        },
         update: {},
         create: {
+            companyId: company.id,
             name: 'Primary Cost Category',
             allocateRevenue: true,
             allocateNonRevenue: false
@@ -96,9 +147,18 @@ async function main() {
 
     for (const acc of accounts) {
         await prisma.account.upsert({
-            where: { code: acc.code },
+            where: {
+                companyId_name: {
+                    companyId: company.id,
+                    name: acc.name
+                }
+            },
             update: {},
-            create: acc
+            create: {
+                ...acc,
+                companyId: company.id,
+                isActive: true
+            }
         });
     }
 
@@ -118,9 +178,17 @@ async function main() {
 
     for (const vt of voucherTypes) {
         await prisma.voucherType.upsert({
-            where: { name: vt.name },
+            where: {
+                companyId_name: {
+                    companyId: company.id,
+                    name: vt.name
+                }
+            },
             update: {},
-            create: vt
+            create: {
+                ...vt,
+                companyId: company.id
+            }
         });
     }
 

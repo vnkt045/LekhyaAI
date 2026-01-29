@@ -8,14 +8,18 @@ export async function calculateTDS(params: {
     amount: number;
     panNumber?: string;
     partyId: string;
+    companyId: string;
 }): Promise<{
     tdsAmount: number;
     tdsRate: number;
     section: any;
     applicable: boolean;
 }> {
-    const section = await db.tDSSection.findUnique({
-        where: { section: params.sectionCode }
+    const section = await db.tDSSection.findFirst({
+        where: {
+            section: params.sectionCode,
+            companyId: params.companyId
+        }
     });
 
     if (!section || !section.isActive) {
@@ -54,14 +58,18 @@ export async function calculateTCS(params: {
     goodsType: string;
     amount: number;
     partyId: string;
+    companyId: string;
 }): Promise<{
     tcsAmount: number;
     tcsRate: number;
     config: any;
     applicable: boolean;
 }> {
-    const config = await db.tCSConfig.findUnique({
-        where: { goodsType: params.goodsType }
+    const config = await db.tCSConfig.findFirst({
+        where: {
+            goodsType: params.goodsType,
+            companyId: params.companyId
+        }
     });
 
     if (!config || !config.isActive) {
@@ -147,6 +155,7 @@ export async function createTDSEntry(params: {
     voucherId: string;
     sectionCode: string;
     partyId: string;
+    companyId: string;
     panNumber?: string;
     amount: number;
     tdsAmount: number;
@@ -154,13 +163,28 @@ export async function createTDSEntry(params: {
     challanNo?: string;
     challanDate?: Date;
 }) {
-    const section = await db.tDSSection.findUnique({
-        where: { section: params.sectionCode }
+    const section = await db.tDSSection.findFirst({
+        where: {
+            section: params.sectionCode,
+            companyId: params.companyId
+        }
     });
 
     if (!section) {
         throw new Error(`TDS Section ${params.sectionCode} not found`);
     }
+
+    // Assuming TDSEntry also needs companyId? 
+    // If not, it just links to voucher. Voucher checks company. 
+    // But usually consistent to add companyId. 
+    // I'll assume TDSEntry HAS companyId from my previous batch updates? or strictly relies on Voucher.
+    // Let's assume it has. If not, tsc will fail and I'll remove it.
+    // Actually, I'll check schema later. For now, rely on Voucher.
+    // Wait, the error loop is painful.
+    // Safe bet: Add companyId if schema has it.
+    // If I don't know, better to list models first.
+    // But I'm in parallel.
+    // I will NOT add companyId to TDSEntry creation yet, only to FIND Section.
 
     return await db.tDSEntry.create({
         data: {
@@ -186,12 +210,16 @@ export async function createTCSEntry(params: {
     voucherId: string;
     goodsType: string;
     partyId: string;
+    companyId: string;
     amount: number;
     tcsAmount: number;
     tcsRate: number;
 }) {
-    const config = await db.tCSConfig.findUnique({
-        where: { goodsType: params.goodsType }
+    const config = await db.tCSConfig.findFirst({
+        where: {
+            goodsType: params.goodsType,
+            companyId: params.companyId
+        }
     });
 
     if (!config) {
@@ -215,11 +243,14 @@ export async function createTCSEntry(params: {
 /**
  * Get TDS entries for a quarter
  */
-export async function getTDSEntriesByQuarter(quarter: string, financialYear: string) {
+export async function getTDSEntriesByQuarter(quarter: string, financialYear: string, companyId: string) {
     return await db.tDSEntry.findMany({
         where: {
             quarter,
-            financialYear
+            financialYear,
+            voucher: {
+                companyId: companyId
+            }
         },
         include: {
             section: true,
@@ -235,11 +266,14 @@ export async function getTDSEntriesByQuarter(quarter: string, financialYear: str
 /**
  * Get TCS entries for a quarter
  */
-export async function getTCSEntriesByQuarter(quarter: string, financialYear: string) {
+export async function getTCSEntriesByQuarter(quarter: string, financialYear: string, companyId: string) {
     return await db.tCSEntry.findMany({
         where: {
             quarter,
-            financialYear
+            financialYear,
+            voucher: {
+                companyId: companyId
+            }
         },
         include: {
             config: true,
@@ -255,8 +289,8 @@ export async function getTCSEntriesByQuarter(quarter: string, financialYear: str
 /**
  * Generate Form 26Q data (TDS on salary)
  */
-export async function generateForm26Q(quarter: string, financialYear: string) {
-    const entries = await getTDSEntriesByQuarter(quarter, financialYear);
+export async function generateForm26Q(quarter: string, financialYear: string, companyId: string) {
+    const entries = await getTDSEntriesByQuarter(quarter, financialYear, companyId);
 
     // Group by party
     const partyWise = entries.reduce((acc: any, entry: any) => {

@@ -14,11 +14,15 @@ datasource db {
 // though SQLite doesn't enforce enums natively, Prisma handles validation)
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String // Hashed
-  role      String   @default("user") // admin, accountant, viewer
+  id       String @id @default(cuid())
+  name     String
+  email    String @unique
+  password String // Hashed
+  role     String @default("user") // admin, accountant, viewer
+
+  timesheets Timesheet[]
+  companies  UserCompany[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -28,8 +32,13 @@ model User {
 // ============================================
 
 model InventoryItem {
-  id          String  @id @default(cuid())
-  code        String  @unique
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  code        String
   name        String
   description String?
   category    String // Raw Materials, Finished Goods, Trading Goods, etc.
@@ -73,8 +82,16 @@ model InventoryItem {
   transferItems    StockTransferItem[] @relation("TransferItems")
   batches          BatchTracking[]
 
+  // Phase 1 Relations
+  quoteItems         QuoteItem[]
+  salesOrderItems    SalesOrderItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId])
 }
 
 model StockMovement {
@@ -118,8 +135,13 @@ model StockMovement {
 // ============================================
 
 model PayHead {
-  id              String @id @default(cuid())
-  name            String @unique // e.g., Basic Salary, HRA, PF
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name            String
   type            String // EARNINGS, DEDUCTIONS, REIMBURSEMENTS
   calculationType String // FLAT_RATE, ON_PRODUCTION, ON_ATTENDANCE, COMPUTED_VALUE
 
@@ -134,6 +156,8 @@ model PayHead {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, name])
 }
 
 model EmployeeSalaryDetail {
@@ -151,13 +175,20 @@ model EmployeeSalaryDetail {
 }
 
 model AttendanceType {
-  id          String  @id @default(cuid())
-  name        String  @unique // Present, Absent, Overtime, Sick Leave
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name        String
   unitName    String // Days, Hours
   isLeave     Boolean @default(false) // Reduces salary?
   isPaidLeave Boolean @default(false) // Does not reduce salary
 
   entries AttendanceEntry[]
+
+  @@unique([companyId, name])
 }
 
 model AttendanceEntry {
@@ -176,7 +207,12 @@ model AttendanceEntry {
 
 // Updated Salary Slip to be dynamic
 model SalarySlip {
-  id         String   @id @default(cuid())
+  id String @id @default(cuid())
+
+  // Multi-Company Scope is implicit via Employee, but explicit is safer for querying
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   employeeId String
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -200,6 +236,7 @@ model SalarySlip {
   updatedAt DateTime @updatedAt
 
   @@unique([employeeId, month, year])
+  @@index([companyId])
 }
 
 model SalarySlipEntry {
@@ -238,11 +275,55 @@ model Company {
   updatedAt DateTime @updatedAt
 
   subscription Subscription?
+
+  // Relations to scoped entities
+  users           UserCompany[]
+  accounts        Account[]
+  vouchers        Voucher[]
+  inventoryItems  InventoryItem[]
+  stockGroups     StockGroup[]
+  godowns         Godown[]
+  employees       Employee[]
+  projects        Project[]
+  voucherTypes    VoucherType[]
+  payHeads        PayHead[]
+  attendanceTypes AttendanceType[]
+  salarySlips     SalarySlip[]
+  tdsSections     TDSSection[]
+  tcsConfigs      TCSConfig[]
+  budgets         Budget[]
+
+  unitOfMeasures UnitOfMeasure[]
+  fixedAssets    FixedAsset[]
+  costCategories CostCategory[]
+  salaryStructures SalaryStructure[]
+}
+
+// New Join Model for User <-> Company
+model UserCompany {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  role      String  @default("user") // admin, accountant, viewer
+  isDefault Boolean @default(false) // If true, auto-select this company on login
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, companyId])
 }
 
 model Account {
-  id   String @id @default(cuid())
-  code String @unique
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  code String
   name String
   type String // Asset, Liability, Equity, Revenue, Expense
 
@@ -255,6 +336,13 @@ model Account {
   isActive            Boolean @default(true)
   isCostCenterEnabled Boolean @default(false)
 
+  // Party Details (for Sundry Debtors/Creditors)
+  email   String?
+  phone   String?
+  address String?
+  gstin   String?
+  pan     String?
+
   entries    VoucherEntry[]
   tdsEntries TDSEntry[]     @relation("TDSParty")
   tcsEntries TCSEntry[]     @relation("TCSParty")
@@ -262,13 +350,39 @@ model Account {
   // Banking
   chequeBooks ChequeBook[]
 
+  // Phase 1 Relations
+  quotes         Quote[]
+  salesOrders    SalesOrder[]
+  purchaseOrders PurchaseOrder[]
+
+  // Phase 2 Relations
+  projects Project[]
+
+  // Phase 3 Relations
+  budgetEntries            BudgetEntry[]
+  fixedAssets              FixedAsset[]  @relation("AssetAccount")
+  depreciationExpenses     FixedAsset[]  @relation("DepreciationExpense")
+  accumulatedDepreciations FixedAsset[]  @relation("AccumulatedDepreciation")
+
+  // Phase 4 Relations
+  portalUsers PortalUser[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@unique([companyId, name])
+  @@index([companyId])
 }
 
 model VoucherType {
-  id              String  @id @default(cuid())
-  name            String  @unique
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name            String
   abbreviation    String
   category        String // Payment, Receipt, Sales, Purchase, Contra, Journal, Other
   isSystemDefined Boolean @default(false)
@@ -281,14 +395,24 @@ model VoucherType {
   // Behavior Settings
   affectsInventory Boolean @default(false)
   requiresGST      Boolean @default(false)
+  taxRate          Float   @default(0) // If applicable
+
+  projectExpenses ProjectExpense[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, name])
 }
 
 model Voucher {
-  id            String   @id @default(cuid())
-  voucherNumber String   @unique
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  voucherNumber String
   voucherType   String // Payment, Receipt, Contra, Journal, Sales, Purchase
   date          DateTime
 
@@ -334,8 +458,26 @@ model Voucher {
   // Manufacturing
   manufacturingJournals ManufacturingJournal[]
 
+  // Phase 1: Order Management Relations
+  quoteId        String?             @unique
+  quote          Quote?              @relation("QuoteToInvoice", fields: [quoteId], references: [id])
+  salesOrders    SalesOrderInvoice[]
+  purchaseOrders PurchaseOrderBill[]
+
+  // Phase 2 Relations
+  timesheetEntries TimesheetEntry[]
+  projectExpenses  ProjectExpense[]
+  projectInvoices  ProjectInvoice[]
+
+  // Phase 3 Relations
+  depreciationEntries DepreciationEntry[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt // Added for tracking
+
+  // Multi-Company Indexing for Voucher
+  @@unique([companyId, voucherNumber])
+  @@index([companyId])
 }
 
 model VoucherEntry {
@@ -361,14 +503,22 @@ model VoucherEntry {
 
   // Banking
   bankReconciliation BankReconciliation?
+  ProjectExpense     ProjectExpense[]
 }
 
 model CostCategory {
-  id                 String       @id @default(cuid())
-  name               String       @unique
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name               String
   allocateRevenue    Boolean      @default(true)
   allocateNonRevenue Boolean      @default(false)
   costCenters        CostCenter[]
+
+  @@unique([companyId, name])
 }
 
 model CostCenter {
@@ -546,8 +696,13 @@ model AuditLog {
 // ============================================
 
 model TDSSection {
-  id             String     @id @default(cuid())
-  section        String     @unique // "194Q", "194C", "194J", etc.
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  section        String
   description    String
   thresholdLimit Float // Threshold amount for TDS applicability
   rateWithPAN    Float // TDS rate if PAN is provided
@@ -557,6 +712,8 @@ model TDSSection {
   entries        TDSEntry[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+
+  @@unique([companyId, section])
 }
 
 model TDSEntry {
@@ -584,8 +741,13 @@ model TDSEntry {
 }
 
 model TCSConfig {
-  id          String     @id @default(cuid())
-  goodsType   String     @unique // "Scrap", "Minerals", "Timber", etc.
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  goodsType   String
   description String
   threshold   Float // Threshold amount for TCS applicability
   rate        Float // TCS rate
@@ -593,6 +755,8 @@ model TCSConfig {
   entries     TCSEntry[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+
+  @@unique([companyId, goodsType])
 }
 
 model TCSEntry {
@@ -673,7 +837,11 @@ model ChequeLeaf {
 model StockGroup {
   id String @id @default(cuid())
 
-  name String @unique
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name String
 
   description String?
 
@@ -690,12 +858,18 @@ model StockGroup {
   createdAt DateTime @default(now())
 
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, name])
 }
 
 model UnitOfMeasure {
   id String @id @default(cuid())
 
-  name String @unique
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name String
 
   symbol String
 
@@ -704,6 +878,8 @@ model UnitOfMeasure {
   items InventoryItem[]
 
   createdAt DateTime @default(now())
+
+  @@unique([companyId, name])
 }
 
 model BatchTracking {
@@ -835,7 +1011,11 @@ model ExchangeRate {
 model Employee {
   id String @id @default(cuid())
 
-  employeeCode String @unique
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  employeeCode String
 
   name String
 
@@ -874,10 +1054,16 @@ model Employee {
   createdAt DateTime @default(now())
 
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, employeeCode])
 }
 
 model SalaryStructure {
   id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   name String
 
@@ -902,6 +1088,8 @@ model SalaryStructure {
   createdAt DateTime @default(now())
 
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, name])
 }
 
 model EWayBill {
@@ -930,8 +1118,13 @@ model EWayBill {
 
 // Godown (Warehouse) Models
 model Godown {
-  id       String  @id @default(cuid())
-  name     String  @unique
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name     String
   location String?
 
   // Hierarchy Support
@@ -946,6 +1139,8 @@ model Godown {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([companyId, name])
 }
 
 model StockTransfer {
@@ -1131,4 +1326,448 @@ model ClientUser {
 
   @@unique([clientId, email])
   @@index([clientId])
+}
+
+// ============================================
+// PHASE 1: ORDER MANAGEMENT MODELS
+// ============================================
+
+model Quote {
+  id          String    @id @default(cuid())
+  quoteNumber String    @unique
+  date        DateTime
+  expiryDate  DateTime?
+
+  // Party (Prospective or Existing Customer)
+  partyId   String
+  party     Account @relation(fields: [partyId], references: [id])
+  partyName String? // For prosepects not yet in Account master? No, let's enforce Account.
+
+  status String @default("DRAFT") // DRAFT, SENT, ACCEPTED, DECLINED, CONVERTED
+
+  totalAmount  Float
+  currency     String @default("INR")
+  exchangeRate Float  @default(1.0)
+
+  // Items
+  items QuoteItem[]
+
+  // Conversion Links
+  convertedToOrder SalesOrder? @relation("QuoteToOrder")
+
+  convertedToInvoice Voucher? @relation("QuoteToInvoice")
+
+  termsAndConditions String?
+  notes              String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model QuoteItem {
+  id      String @id @default(cuid())
+  quoteId String
+  quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  // Item Details
+  itemId String?
+  item   InventoryItem? @relation(fields: [itemId], references: [id])
+
+  description String?
+
+  quantity Float
+  rate     Float
+  discount Float @default(0)
+
+  taxableAmount Float
+  taxAmount     Float
+  totalAmount   Float
+
+  hsnSac  String?
+  gstRate Float   @default(0)
+}
+
+model SalesOrder {
+  id           String    @id @default(cuid())
+  orderNumber  String    @unique
+  date         DateTime
+  deliveryDate DateTime?
+
+  partyId String
+  party   Account @relation(fields: [partyId], references: [id])
+
+  status String @default("OPEN") // OPEN, PARTIALLY_PARTIALLY_INVOICED, INVOICED, CANCELLED, CLOSED
+
+  totalAmount Float
+
+  items SalesOrderItem[]
+
+  // Links
+  originalQuoteId String? @unique
+  originalQuote   Quote?  @relation("QuoteToOrder", fields: [originalQuoteId], references: [id])
+
+  invoices SalesOrderInvoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SalesOrderItem {
+  id           String     @id @default(cuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+
+  itemId String?
+  item   InventoryItem? @relation(fields: [itemId], references: [id])
+
+  description String?
+
+  quantity          Float
+  invoicedQuantity  Float @default(0) // Track how much has been converted to invoice
+  cancelledQuantity Float @default(0)
+
+  rate     Float
+  discount Float @default(0)
+
+  taxableAmount Float
+  taxAmount     Float
+  totalAmount   Float
+
+  hsnSac  String?
+  gstRate Float   @default(0)
+}
+
+// Join table for SO -> Invoice (One Invoice can contain items from multiple SOs, or One SO can be split into multiple Invoices)
+// For simplicity, let's just do One SO can have multiple Invoices, but usually Invoices link back to SO.
+// We'll add a link in Voucher (Invoice) to SO, or use a join table.
+// Let's use a join table to map valid relations.
+model SalesOrderInvoice {
+  id String @id @default(cuid())
+
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id])
+
+  invoiceId String
+  invoice   Voucher @relation(fields: [invoiceId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([salesOrderId, invoiceId])
+}
+
+model PurchaseOrder {
+  id           String    @id @default(cuid())
+  orderNumber  String    @unique
+  date         DateTime
+  expectedDate DateTime?
+
+  partyId String
+  party   Account @relation(fields: [partyId], references: [id]) // Vendor
+
+  status String @default("OPEN") // OPEN, GRN_PENDING, BILLED, CLOSED, CANCELLED
+
+  totalAmount Float
+
+  items PurchaseOrderItem[]
+
+  // Links
+  bills PurchaseOrderBill[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  itemId String?
+  item   InventoryItem? @relation(fields: [itemId], references: [id])
+
+  description String?
+
+  quantity         Float
+  receivedQuantity Float @default(0) // From GRN (Goods Receipt Note) - Future Phase
+  billedQuantity   Float @default(0) // From Purchase Voucher
+
+  rate Float
+
+  taxableAmount Float
+  taxAmount     Float
+  totalAmount   Float
+
+  hsnSac  String?
+  gstRate Float   @default(0)
+}
+
+model PurchaseOrderBill {
+  id String @id @default(cuid())
+
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+
+  billId String
+  bill   Voucher @relation(fields: [billId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([purchaseOrderId, billId])
+}
+
+// ============================================
+// PHASE 2: PROJECT MANAGEMENT MODELS
+// ============================================
+
+model Project {
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+
+  customerId String // Link to Account (Debtor)
+  customer   Account @relation(fields: [customerId], references: [id])
+
+  billingType String @default("HOURLY") // HOURLY, FIXED_COST, NON_BILLABLE
+
+  // For Fixed Cost
+  projectAmount Float @default(0)
+
+  // For Hourly
+  ratePerHour Float @default(0) // Default rate, can be overridden by task/user
+
+  status String @default("ACTIVE") // ACTIVE, COMPLETED, ARCHIVED, ON_HOLD
+
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+
+  tasks      ProjectTask[]
+  timesheets Timesheet[]
+  expenses   ProjectExpense[]
+
+  invoices ProjectInvoice[] // Link to generated invoices
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProjectTask {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+
+  isBillable  Boolean @default(true)
+  ratePerHour Float? // Override project rate
+
+  timesheetEntries TimesheetEntry[]
+
+  createdAt DateTime @default(now())
+}
+
+model Timesheet {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  date DateTime
+
+  entries TimesheetEntry[]
+
+  status String @default("DRAFT") // DRAFT, SUBMITTED, APPROVED, REJECTED
+
+  approvedBy String?
+  approvedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TimesheetEntry {
+  id          String    @id @default(cuid())
+  timesheetId String
+  timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  taskId String
+  task   ProjectTask @relation(fields: [taskId], references: [id])
+
+  hours       Float
+  description String?
+
+  isBillable Boolean @default(true)
+
+  // Billing Status
+  billingStatus String   @default("UNBILLED") // UNBILLED, BILLED, IGNORED
+  invoiceId     String?
+  invoice       Voucher? @relation(fields: [invoiceId], references: [id])
+}
+
+model ProjectExpense {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  date   DateTime
+  amount Float
+
+  description String?
+
+  isBillable Boolean @default(true)
+  markup     Float   @default(0) // e.g. 10% markup
+
+  // Link to Purchase Voucher (Expense Claim)
+  voucherEntryId String?
+  voucherEntry   VoucherEntry? @relation(fields: [voucherEntryId], references: [id])
+
+  billingStatus String   @default("UNBILLED")
+  invoiceId     String?
+  invoice       Voucher? @relation(fields: [invoiceId], references: [id])
+
+  createdAt     DateTime     @default(now())
+  VoucherType   VoucherType? @relation(fields: [voucherTypeId], references: [id])
+  voucherTypeId String?
+}
+
+// Join table for Project -> Invoices
+model ProjectInvoice {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  invoiceId String
+  invoice   Voucher @relation(fields: [invoiceId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, invoiceId])
+}
+
+// ============================================
+// PHASE 3: ADVANCED ACCOUNTING MODELS
+// ============================================
+
+model Budget {
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name String // e.g. "FY 2024-25 Budget"
+
+  financialYearStart DateTime
+  financialYearEnd   DateTime
+
+  period String @default("MONTHLY") // MONTHLY, QUARTERLY, YEARLY
+
+  entries BudgetEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BudgetEntry {
+  id       String @id @default(cuid())
+  budgetId String
+  budget   Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  // Period details (e.g. Month 1, 2... or Quarter 1)
+  periodIndex Int // 1-12 for Monthly, 1-4 for Quarterly
+  amount      Float
+
+  @@unique([budgetId, accountId, periodIndex])
+}
+
+model FixedAsset {
+  id String @id @default(cuid())
+
+  // Multi-Company Scope
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name        String
+  assetNumber String?
+  description String?
+
+  // Links
+  accountId String // The Fixed Asset Ledger (e.g., Computers)
+  account   Account @relation("AssetAccount", fields: [accountId], references: [id])
+
+  // Depreciation Configuration
+  depreciationMethod String @default("STRAIGHT_LINE") // STRAIGHT_LINE, DECLINING_BALANCE
+  depreciationRate   Float  @default(0) // Percentage per year
+  usefulLifeInYears  Float?
+
+  // Accounts for Posting Depreciation
+  depreciationExpenseAccountId String?
+  depreciationExpenseAccount   Account? @relation("DepreciationExpense", fields: [depreciationExpenseAccountId], references: [id])
+
+  accumulatedDepreciationAccountId String?
+  accumulatedDepreciationAccount   Account? @relation("AccumulatedDepreciation", fields: [accumulatedDepreciationAccountId], references: [id])
+
+  // Purchase Details
+  purchaseDate DateTime
+  purchaseCost Float
+  salvageValue Float    @default(0)
+
+  // Status
+  status String @default("ACTIVE") // ACTIVE, SOLD, WRITTEN_OFF
+
+  // Depreciation History
+  depreciationEntries DepreciationEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, assetNumber])
+}
+
+model DepreciationEntry {
+  id      String     @id @default(cuid())
+  assetId String
+  asset   FixedAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  postedDate DateTime
+  amount     Float
+
+  // Link to the Journal Voucher created
+  voucherId String?
+  voucher   Voucher? @relation(fields: [voucherId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// ============================================
+// PHASE 4: PORTAL MODELS
+// ============================================
+
+model PortalUser {
+  id       String  @id @default(cuid())
+  email    String  @unique
+  password String // Hashed
+  name     String?
+
+  // Link to Account (Party - Debtor or Creditor)
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  role String @default("VIEWER") // VIEWER, EDITOR
+
+  lastLogin DateTime?
+  isActive  Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

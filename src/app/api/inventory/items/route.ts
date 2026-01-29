@@ -7,11 +7,14 @@ import { logAudit } from '@/lib/audit';
 
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) return new NextResponse('Unauthorized', { status: 401 });
+    if (!session || !session.user?.companyId) return new NextResponse('Unauthorized or No Company', { status: 401 });
 
     try {
         const items = await db.inventoryItem.findMany({
-            where: { isActive: true },
+            where: {
+                isActive: true,
+                companyId: session.user.companyId
+            },
             orderBy: { name: 'asc' }
         });
         return NextResponse.json(items);
@@ -23,15 +26,18 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) return new NextResponse('Unauthorized', { status: 401 });
+    if (!session || !session.user?.companyId) return new NextResponse('Unauthorized or No Company', { status: 401 });
 
     try {
         const body = await req.json();
         const { code, name, category, unit, hsnCode, purchaseRate, saleRate, openingStock } = body;
 
-        // Check for duplicate code (Barcode)
-        const existing = await db.inventoryItem.findUnique({
-            where: { code }
+        // Check for duplicate code (Barcode) within company
+        const existing = await db.inventoryItem.findFirst({
+            where: {
+                code,
+                companyId: session.user.companyId
+            }
         });
 
         if (existing) {
@@ -40,6 +46,7 @@ export async function POST(req: Request) {
 
         const newItem = await db.inventoryItem.create({
             data: {
+                companyId: session.user.companyId,
                 code,
                 name,
                 category,

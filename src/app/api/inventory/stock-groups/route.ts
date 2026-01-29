@@ -6,12 +6,13 @@ import { authOptions } from '@/lib/auth';
 // GET /api/inventory/stock-groups - Fetch all stock groups
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const groups = await db.stockGroup.findMany({
+            where: { companyId: session.user.companyId! },
             include: {
                 parent: true,
                 children: true,
@@ -36,15 +37,28 @@ export async function GET(req: Request) {
 // POST /api/inventory/stock-groups - Create new stock group
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const body = await req.json();
 
+        // Check for duplicates
+        const existing = await db.stockGroup.findFirst({
+            where: {
+                name: body.name,
+                companyId: session.user.companyId!
+            }
+        });
+
+        if (existing) {
+            return NextResponse.json({ error: 'Stock Group already exists' }, { status: 400 });
+        }
+
         const group = await db.stockGroup.create({
             data: {
+                companyId: session.user.companyId!,
                 name: body.name,
                 parentId: body.parentId || null,
                 description: body.description

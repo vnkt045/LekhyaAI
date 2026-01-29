@@ -3,15 +3,19 @@ import { db } from '@/lib/db';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
+// GET /api/tds/sections
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const sections = await db.tDSSection.findMany({
-            where: { isActive: true },
+            where: {
+                isActive: true,
+                companyId: session.user.companyId!
+            },
             orderBy: { section: 'asc' }
         });
 
@@ -22,17 +26,31 @@ export async function GET(req: Request) {
     }
 }
 
+// POST /api/tds/sections
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const body = await req.json();
 
+        // Check for duplicates in company
+        const existing = await db.tDSSection.findFirst({
+            where: {
+                section: body.section,
+                companyId: session.user.companyId!
+            }
+        });
+
+        if (existing) {
+            return NextResponse.json({ error: 'TDS Section already exists' }, { status: 400 });
+        }
+
         const section = await db.tDSSection.create({
             data: {
+                companyId: session.user.companyId!,
                 section: body.section,
                 description: body.description,
                 thresholdLimit: parseFloat(body.thresholdLimit),

@@ -7,7 +7,7 @@ import { logAudit } from '@/lib/audit';
 // GET /api/payroll/employees - Fetch all employees
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -16,7 +16,10 @@ export async function GET(req: Request) {
         const isActive = searchParams.get('isActive');
 
         const employees = await db.employee.findMany({
-            where: isActive !== null ? { isActive: isActive === 'true' } : undefined,
+            where: {
+                companyId: session.user.companyId!,
+                ...(isActive !== null ? { isActive: isActive === 'true' } : {})
+            },
             include: {
                 salaryDetails: {
                     include: {
@@ -41,7 +44,7 @@ export async function GET(req: Request) {
 // POST /api/payroll/employees - Create new employee
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -52,9 +55,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // Check for duplicate code
-        const existing = await db.employee.findUnique({
-            where: { employeeCode: body.employeeCode }
+        // Check for duplicate code within company
+        const existing = await db.employee.findFirst({
+            where: {
+                employeeCode: body.employeeCode,
+                companyId: session.user.companyId!
+            }
         });
 
         if (existing) {
@@ -63,6 +69,7 @@ export async function POST(req: Request) {
 
         const employee = await db.employee.create({
             data: {
+                companyId: session.user.companyId!,
                 employeeCode: body.employeeCode,
                 name: body.name,
                 designation: body.designation,
@@ -99,7 +106,7 @@ export async function POST(req: Request) {
 // PUT /api/payroll/employees - Update employee
 export async function PUT(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -111,7 +118,14 @@ export async function PUT(req: Request) {
             return NextResponse.json({ error: 'Employee ID is required' }, { status: 400 });
         }
 
-        const oldEmployee = await db.employee.findUnique({ where: { id } });
+        // Verify employee belongs to company
+        const oldEmployee = await db.employee.findFirst({
+            where: {
+                id,
+                companyId: session.user.companyId!
+            }
+        });
+
         if (!oldEmployee) {
             return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
         }
@@ -144,7 +158,7 @@ export async function PUT(req: Request) {
 // DELETE /api/payroll/employees - Delete employee
 export async function DELETE(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -156,8 +170,11 @@ export async function DELETE(req: Request) {
             return NextResponse.json({ error: 'Employee ID is required' }, { status: 400 });
         }
 
-        const employee = await db.employee.findUnique({
-            where: { id },
+        const employee = await db.employee.findFirst({
+            where: {
+                id,
+                companyId: session.user.companyId!
+            },
             include: { salarySlips: true }
         });
 

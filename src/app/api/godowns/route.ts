@@ -5,12 +5,15 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const godowns = await db.godown.findMany({
+            where: {
+                companyId: session.user.companyId!
+            },
             orderBy: { name: 'asc' }
         });
         return NextResponse.json(godowns);
@@ -22,7 +25,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -36,6 +39,7 @@ export async function POST(req: Request) {
 
         const godown = await db.godown.create({
             data: {
+                companyId: session.user.companyId!,
                 name,
                 location
             }

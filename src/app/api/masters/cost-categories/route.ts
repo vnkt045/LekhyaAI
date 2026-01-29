@@ -6,10 +6,13 @@ import { db } from '@/lib/db';
 // Cost Categories
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session || !session.user?.companyId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     try {
         const categories = await db.costCategory.findMany({
+            where: {
+                companyId: session.user.companyId!
+            },
             include: { _count: { select: { costCenters: true } } },
             orderBy: { name: 'asc' }
         });
@@ -21,7 +24,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session || !session.user?.companyId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     try {
         const body = await req.json();
@@ -31,6 +34,7 @@ export async function POST(req: Request) {
 
         const category = await db.costCategory.create({
             data: {
+                companyId: session.user.companyId!,
                 name,
                 allocateRevenue: allocateRevenue ?? true,
                 allocateNonRevenue: allocateNonRevenue ?? false

@@ -1,0 +1,23 @@
+
+// ============================================
+// PHASE 4: PORTAL MODELS
+// ============================================
+
+model PortalUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // Hashed
+  name      String?
+  
+  // Link to Account (Party - Debtor or Creditor)
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id])
+  
+  role      String   @default("VIEWER") // VIEWER, EDITOR
+  
+  lastLogin DateTime?
+  isActive  Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

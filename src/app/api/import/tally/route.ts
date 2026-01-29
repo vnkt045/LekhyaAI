@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth';
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -17,7 +17,10 @@ export async function POST(req: Request) {
         for (const ledger of ledgers) {
             // Check if exists
             const existing = await db.account.findFirst({
-                where: { name: ledger.name }
+                where: {
+                    name: ledger.name,
+                    companyId: session.user.companyId!
+                }
             });
 
             if (!existing) {
@@ -32,6 +35,7 @@ export async function POST(req: Request) {
 
                 await db.account.create({
                     data: {
+                        companyId: session.user.companyId!,
                         name: ledger.name,
                         code: ledger.name.substring(0, 3).toUpperCase() + Math.floor(Math.random() * 10000), // Temp auto-code
                         type: type,
@@ -85,6 +89,7 @@ export async function POST(req: Request) {
             // Create Voucher
             const newVoucher = await db.voucher.create({
                 data: {
+                    companyId: session.user.companyId!,
                     voucherNumber: v.voucherNumber || `IMP-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
                     voucherType: formattedType,
                     date: voucherDate,
@@ -99,7 +104,10 @@ export async function POST(req: Request) {
             for (const entry of v.ledgerEntries) {
                 // Find Account
                 const account = await db.account.findFirst({
-                    where: { name: entry.ledgerName }
+                    where: {
+                        name: entry.ledgerName,
+                        companyId: session.user.companyId!
+                    }
                 });
 
                 if (account) {

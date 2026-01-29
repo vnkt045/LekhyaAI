@@ -7,15 +7,18 @@ import { logAudit } from '@/lib/audit';
 
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session || !session.user?.companyId) {
+        return NextResponse.json({ error: 'Unauthorized or No Company Selected' }, { status: 401 });
     }
 
     try {
         const { searchParams } = new URL(req.url);
         const type = searchParams.get('type');
 
-        const whereClause: any = { isActive: true };
+        const whereClause: any = {
+            isActive: true,
+            companyId: session.user.companyId
+        };
         if (type) {
             whereClause.type = type;
         }
@@ -33,8 +36,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session || !session.user?.companyId) {
+        return NextResponse.json({ error: 'Unauthorized or No Company Selected' }, { status: 401 });
     }
 
     try {
@@ -50,6 +53,7 @@ export async function POST(req: Request) {
 
         const account = await db.account.create({
             data: {
+                companyId: session.user.companyId,
                 name: body.name,
                 code: code,
                 type: body.type,  // Asset, Liability, Equity, Revenue, Expense

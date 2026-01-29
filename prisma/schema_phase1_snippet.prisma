@@ -1,0 +1,189 @@
+
+// ============================================
+// PHASE 1: ORDER MANAGEMENT MODELS
+// ============================================
+
+model Quote {
+  id          String   @id @default(cuid())
+  quoteNumber String   @unique
+  date        DateTime
+  expiryDate  DateTime?
+  
+  // Party (Prospective or Existing Customer)
+  partyId     String
+  party       Account @relation(fields: [partyId], references: [id])
+  partyName   String? // For prosepects not yet in Account master? No, let's enforce Account.
+
+  status      String   @default("DRAFT") // DRAFT, SENT, ACCEPTED, DECLINED, CONVERTED
+  
+  totalAmount     Float
+  currency        String @default("INR")
+  exchangeRate    Float  @default(1.0)
+
+  // Items
+  items       QuoteItem[]
+
+  // Conversion Links
+  convertedToOrderId String? // Link to SO
+  convertedToOrder   SalesOrder? @relation("QuoteToOrder", fields: [convertedToOrderId], references: [id])
+  
+  convertedToInvoiceId String? // Link to Voucher (Sales)
+  convertedToInvoice   Voucher? @relation("QuoteToInvoice", fields: [convertedToInvoiceId], references: [id])
+
+  termsAndConditions String?
+  notes              String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model QuoteItem {
+  id        String @id @default(cuid())
+  quoteId   String
+  quote     Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  // Item Details
+  itemId    String?
+  item      InventoryItem? @relation(fields: [itemId], references: [id])
+  
+  description String?
+  
+  quantity  Float
+  rate      Float
+  discount  Float @default(0)
+  
+  taxableAmount Float
+  taxAmount     Float
+  totalAmount   Float
+  
+  hsnSac    String?
+  gstRate   Float @default(0)
+}
+
+model SalesOrder {
+  id          String   @id @default(cuid())
+  orderNumber String   @unique
+  date        DateTime
+  deliveryDate DateTime?
+
+  partyId     String
+  party       Account @relation(fields: [partyId], references: [id])
+
+  status      String   @default("OPEN") // OPEN, PARTIALLY_PARTIALLY_INVOICED, INVOICED, CANCELLED, CLOSED
+  
+  totalAmount     Float
+  
+  items       SalesOrderItem[]
+
+  // Links
+  originalQuoteId String? @unique
+  originalQuote   Quote?  @relation("QuoteToOrder")
+
+  invoices    SalesOrderInvoice[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SalesOrderItem {
+  id           String @id @default(cuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+
+  itemId    String?
+  item      InventoryItem? @relation(fields: [itemId], references: [id])
+  
+  description String?
+  
+  quantity        Float
+  invoicedQuantity Float @default(0) // Track how much has been converted to invoice
+  cancelledQuantity Float @default(0)
+
+  rate      Float
+  discount  Float @default(0)
+  
+  taxableAmount Float
+  taxAmount     Float
+  totalAmount   Float
+  
+  hsnSac    String?
+  gstRate   Float @default(0)
+}
+
+// Join table for SO -> Invoice (One Invoice can contain items from multiple SOs, or One SO can be split into multiple Invoices)
+// For simplicity, let's just do One SO can have multiple Invoices, but usually Invoices link back to SO.
+// We'll add a link in Voucher (Invoice) to SO, or use a join table.
+// Let's use a join table to map valid relations.
+model SalesOrderInvoice {
+  id String @id @default(cuid())
+  
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id])
+  
+  invoiceId    String
+  invoice      Voucher @relation(fields: [invoiceId], references: [id])
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([salesOrderId, invoiceId])
+}
+
+model PurchaseOrder {
+  id          String   @id @default(cuid())
+  orderNumber String   @unique
+  date        DateTime
+  expectedDate DateTime?
+
+  partyId     String
+  party       Account @relation(fields: [partyId], references: [id]) // Vendor
+
+  status      String   @default("OPEN") // OPEN, GRN_PENDING, BILLED, CLOSED, CANCELLED
+  
+  totalAmount     Float
+  
+  items       PurchaseOrderItem[]
+
+  // Links
+  bills    PurchaseOrderBill[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PurchaseOrderItem {
+  id              String @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  itemId    String?
+  item      InventoryItem? @relation(fields: [itemId], references: [id])
+  
+  description String?
+  
+  quantity        Float
+  receivedQuantity Float @default(0) // From GRN (Goods Receipt Note) - Future Phase
+  billedQuantity   Float @default(0) // From Purchase Voucher
+  
+  rate      Float
+  
+  taxableAmount Float
+  taxAmount     Float
+  totalAmount   Float
+  
+  hsnSac    String?
+  gstRate   Float @default(0)
+}
+
+model PurchaseOrderBill {
+  id String @id @default(cuid())
+  
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  
+  billId    String
+  bill      Voucher @relation(fields: [billId], references: [id])
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([purchaseOrderId, billId])
+}

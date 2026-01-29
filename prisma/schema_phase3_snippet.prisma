@@ -1,0 +1,86 @@
+
+// ============================================
+// PHASE 3: ADVANCED ACCOUNTING MODELS
+// ============================================
+
+model Budget {
+  id          String   @id @default(cuid())
+  name        String   // e.g. "FY 2024-25 Budget"
+  
+  financialYearStart DateTime
+  financialYearEnd   DateTime
+  
+  period      String   @default("MONTHLY") // MONTHLY, QUARTERLY, YEARLY
+  
+  entries     BudgetEntry[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BudgetEntry {
+  id        String   @id @default(cuid())
+  budgetId  String
+  budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id])
+  
+  // Period details (e.g. Month 1, 2... or Quarter 1)
+  periodIndex Int      // 1-12 for Monthly, 1-4 for Quarterly
+  amount      Float
+  
+  @@unique([budgetId, accountId, periodIndex])
+}
+
+model FixedAsset {
+  id          String   @id @default(cuid())
+  name        String
+  assetNumber String?  @unique
+  description String?
+  
+  // Links
+  accountId   String   // The Fixed Asset Ledger (e.g., Computers)
+  account     Account  @relation("AssetAccount", fields: [accountId], references: [id])
+  
+  // Depreciation Configuration
+  depreciationMethod String @default("STRAIGHT_LINE") // STRAIGHT_LINE, DECLINING_BALANCE
+  depreciationRate   Float  @default(0) // Percentage per year
+  usefulLifeInYears  Float?
+  
+  // Accounts for Posting Depreciation
+  depreciationExpenseAccountId String?
+  depreciationExpenseAccount   Account? @relation("DepreciationExpense", fields: [depreciationExpenseAccountId], references: [id])
+  
+  accumulatedDepreciationAccountId String?
+  accumulatedDepreciationAccount   Account? @relation("AccumulatedDepreciation", fields: [accumulatedDepreciationAccountId], references: [id])
+  
+  // Purchase Details
+  purchaseDate DateTime
+  purchaseCost Float
+  salvageValue Float @default(0)
+  
+  // Status
+  status       String @default("ACTIVE") // ACTIVE, SOLD, WRITTEN_OFF
+  
+  // Depreciation History
+  depreciationEntries DepreciationEntry[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model DepreciationEntry {
+  id           String     @id @default(cuid())
+  assetId      String
+  asset        FixedAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  postedDate   DateTime
+  amount       Float
+  
+  // Link to the Journal Voucher created
+  voucherId    String?
+  voucher      Voucher?   @relation(fields: [voucherId], references: [id])
+  
+  createdAt    DateTime @default(now())
+}

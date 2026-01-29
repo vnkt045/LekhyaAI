@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     }
 
     try {
-        const form26Q = await generateForm26Q(quarter, financialYear);
+        const form26Q = await generateForm26Q(quarter, financialYear, session.user.companyId!);
 
         return NextResponse.json(form26Q);
     } catch (error) {

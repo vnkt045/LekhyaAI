@@ -5,12 +5,17 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     try {
         const costCenters = await db.costCenter.findMany({
+            where: {
+                category: {
+                    companyId: session.user.companyId!
+                }
+            },
             include: { category: true },
             orderBy: { name: 'asc' }
         });
@@ -23,7 +28,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -35,14 +40,18 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Name is required' }, { status: 400 });
         }
 
-        // Ensure Primary Cost Category exists
-        let primaryCategory = await db.costCategory.findUnique({
-            where: { name: 'Primary Cost Category' }
+        // Ensure Primary Cost Category exists for this company
+        let primaryCategory = await db.costCategory.findFirst({
+            where: {
+                name: 'Primary Cost Category',
+                companyId: session.user.companyId!
+            }
         });
 
         if (!primaryCategory) {
             primaryCategory = await db.costCategory.create({
                 data: {
+                    companyId: session.user.companyId!,
                     name: 'Primary Cost Category',
                     allocateRevenue: true,
                     allocateNonRevenue: false, // Default Tally behavior
