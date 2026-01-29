@@ -58,8 +58,8 @@ export async function middleware(request: NextRequest) {
 
     // If no session exists
     if (!session) {
-        // Allow public paths (login, assets, etc.) to pass
-        if (isPublicPath || pathname === '/login' || pathname === '/api/auth/signin') {
+        // Allow public paths (login, register, assets, etc.) to pass
+        if (isPublicPath || pathname === '/login' || pathname === '/register' || pathname === '/api/auth/signin') {
             return NextResponse.next();
         }
 
