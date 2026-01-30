@@ -9,6 +9,7 @@ interface AuditLogParams {
     oldValue?: any;
     newValue?: any;
     req?: Request;
+    description?: string;
 }
 
 /**
@@ -71,6 +72,7 @@ async function createAuditLog(params: {
     changes?: any;
     ipAddress?: string;
     userAgent?: string;
+    description?: string;
 }) {
     await db.auditLog.create({
         data: {
@@ -85,7 +87,7 @@ async function createAuditLog(params: {
             changes: params.changes ? JSON.stringify(params.changes) : null,
             ipAddress: params.ipAddress || 'unknown',
             userAgent: params.userAgent || 'unknown',
-            description: generateDescription(params)
+            description: params.description || generateDescription(params)
         }
     });
 }
