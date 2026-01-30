@@ -42,7 +42,7 @@ export async function POST(req: Request) {
                 name,
                 email,
                 password: hashedPassword,
-                role: 'USER' // Default role
+                role: 'user' // Default role (lowercase)
             }
         });
 
@@ -57,10 +57,10 @@ export async function POST(req: Request) {
             },
             { status: 201 }
         );
-    } catch (error) {
+    } catch (error: any) {
         console.error('Registration error:', error);
         return NextResponse.json(
-            { error: 'Internal server error' },
+            { error: error?.message || 'Internal server error' },
             { status: 500 }
         );
     }
