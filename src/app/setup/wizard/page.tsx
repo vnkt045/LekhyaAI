@@ -73,8 +73,12 @@ export default function SetupWizard() {
         const result = await completeSetup({} as any, formData);
 
         if (result?.errors) {
-            // simple error handling for now
-            setServerError('Please fix the errors.');
+            // Log for debugging
+            console.error('Submission Errors:', result.errors);
+
+            // Format detailed error message
+            const errorMessages = Object.values(result.errors).flat().join(', ');
+            setServerError(`Validation Failed: ${errorMessages}`);
             setIsSubmitting(false);
         } else if (result?.message) {
             setServerError(result.message);

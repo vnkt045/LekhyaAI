@@ -34,15 +34,16 @@ export async function completeSetup(prevState: SetupState, formData: FormData) {
         adminName: formData.get('adminName'),
         adminEmail: formData.get('adminEmail'),
         adminPassword: formData.get('adminPassword'),
-        useDefaultCOA: formData.get('useDefaultCOA') === 'on',
+        useDefaultCOA: formData.get('useDefaultCOA') === 'true' || formData.get('useDefaultCOA') === 'on',
     };
 
     const validatedFields = SetupSchema.safeParse(rawData);
 
     if (!validatedFields.success) {
+        console.error('Setup Validation Errors:', validatedFields.error.flatten().fieldErrors);
         return {
             errors: validatedFields.error.flatten().fieldErrors,
-            message: 'Missing Fields. Failed to complete setup.',
+            message: 'Validation failed. Please check your inputs.',
         };
     }
 
@@ -90,7 +91,7 @@ export async function completeSetup(prevState: SetupState, formData: FormData) {
 
         // 2. Create or Update Admin User
         const hashedPassword = await bcrypt.hash(adminPassword, 10);
-        await prisma.user.upsert({
+        const user = await prisma.user.upsert({
             where: { email: adminEmail },
             update: {
                 name: adminName,
@@ -103,6 +104,25 @@ export async function completeSetup(prevState: SetupState, formData: FormData) {
                 password: hashedPassword,
                 role: 'admin',
             },
+        });
+
+        // 2.5 Link User to Company (CRITICAL FIX)
+        await prisma.userCompany.upsert({
+            where: {
+                userId_companyId: {
+                    userId: user.id,
+                    companyId: 'default-company'
+                }
+            },
+            update: {
+                role: 'admin'
+            },
+            create: {
+                userId: user.id,
+                companyId: 'default-company',
+                role: 'admin',
+                isDefault: true
+            }
         });
 
         // 3. Create Default COA if requested
