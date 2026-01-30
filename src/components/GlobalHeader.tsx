@@ -38,8 +38,8 @@ export default function GlobalHeader() {
         return () => clearInterval(timer);
     }, []);
 
-    // Only hide on login page and marketing site
-    if (pathname === '/login' || pathname?.startsWith('/marketing')) {
+    // Only hide on login page, marketing site, and setup flow
+    if (pathname === '/login' || pathname?.startsWith('/marketing') || pathname?.startsWith('/setup') || pathname?.startsWith('/activate')) {
         return null;
     }
 

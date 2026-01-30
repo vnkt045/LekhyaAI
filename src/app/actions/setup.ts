@@ -58,32 +58,46 @@ export async function completeSetup(prevState: SetupState, formData: FormData) {
     } = validatedFields.data;
 
     try {
-        // 1. Create Company
+        // 1. Create or Update Company
         const fyStart = new Date(financialYearStart);
         const fyEnd = new Date(financialYearStart);
         fyEnd.setFullYear(fyEnd.getFullYear() + 1);
-        fyEnd.setDate(fyEnd.getDate() - 1); // e.g. 1st April 2024 to 31st March 2025
+        fyEnd.setDate(fyEnd.getDate() - 1);
 
-        await prisma.company.create({
-            data: {
-                id: 'default-company', // Enforce singleton for now
+        await prisma.company.upsert({
+            where: { id: 'default-company' },
+            update: {
                 name: companyName,
                 email: email,
                 gstin: gstin || null,
-                address: 'Edit Address in Settings', // Placeholder
-                city: 'Mumbai', // Placeholder
-                state: 'Maharashtra', // Placeholder
-                pincode: '000000', // Placeholder
+                financialYearStart: fyStart,
+                financialYearEnd: fyEnd,
+            },
+            create: {
+                id: 'default-company',
+                name: companyName,
+                email: email,
+                gstin: gstin || null,
+                address: 'Edit Address in Settings',
+                city: 'Mumbai',
+                state: 'Maharashtra',
+                pincode: '000000',
                 phone: '',
                 financialYearStart: fyStart,
                 financialYearEnd: fyEnd,
             },
         });
 
-        // 2. Create Admin User
+        // 2. Create or Update Admin User
         const hashedPassword = await bcrypt.hash(adminPassword, 10);
-        await prisma.user.create({
-            data: {
+        await prisma.user.upsert({
+            where: { email: adminEmail },
+            update: {
+                name: adminName,
+                password: hashedPassword,
+                role: 'admin',
+            },
+            create: {
                 name: adminName,
                 email: adminEmail,
                 password: hashedPassword,
@@ -94,45 +108,55 @@ export async function completeSetup(prevState: SetupState, formData: FormData) {
         // 3. Create Default COA if requested
         if (useDefaultCOA) {
             const accounts = [
-                // Assets
                 { code: 'CASH', name: 'Cash-in-Hand', type: 'Asset' },
                 { code: 'BANK', name: 'Bank Accounts', type: 'Asset' },
                 { code: 'FIXED_ASSETS', name: 'Fixed Assets', type: 'Asset' },
                 { code: 'SUNDRY_DEBTORS', name: 'Sundry Debtors', type: 'Asset' },
-                // Liabilities
                 { code: 'CAPITAL', name: 'Capital Account', type: 'Equity' },
                 { code: 'SUNDRY_CREDITORS', name: 'Sundry Creditors', type: 'Liability' },
                 { code: 'DUTIES_TAXES', name: 'Duties & Taxes', type: 'Liability' },
-                // Income
                 { code: 'SALES', name: 'Sales Accounts', type: 'Revenue' },
-                // Expenses
                 { code: 'PURCHASE', name: 'Purchase Accounts', type: 'Expense' },
                 { code: 'INDIRECT_EXPENSE', name: 'Indirect Expenses', type: 'Expense' },
             ];
 
             for (const acc of accounts) {
-                await prisma.account.create({
-                    data: {
-                        ...acc,
-                        companyId: 'default-company',
-                        isActive: true
-                    }
+                // Check if account exists first to avoid duplicate errors
+                // or just ignore if validation fails for code unique constraint
+                const existing = await prisma.account.findFirst({
+                    where: { code: acc.code, companyId: 'default-company' }
                 });
+
+                if (!existing) {
+                    await prisma.account.create({
+                        data: {
+                            ...acc,
+                            companyId: 'default-company',
+                            isActive: true
+                        }
+                    });
+                }
             }
         }
 
-        // 4. Create Default Godown (Required for inventory)
-        await prisma.godown.create({
-            data: {
-                name: 'Main Location',
-                companyId: 'default-company'
-            }
+        // 4. Create Default Godown
+        const existingGodown = await prisma.godown.findFirst({
+            where: { name: 'Main Location', companyId: 'default-company' }
         });
 
-    } catch (e) {
+        if (!existingGodown) {
+            await prisma.godown.create({
+                data: {
+                    name: 'Main Location',
+                    companyId: 'default-company'
+                }
+            });
+        }
+
+    } catch (e: any) {
         console.error('Setup Error:', e);
         return {
-            message: 'Database Error: Failed to create setup data. check logs.',
+            message: e.message || 'Database Error: Failed to create setup data.',
         };
     }
 

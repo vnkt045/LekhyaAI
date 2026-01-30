@@ -21,14 +21,17 @@ export default function ConditionalLayout({
         return <>{children}</>;
     }
 
+    // Define routes where the app shell (Header, Calculator, etc.) should be hidden
+    const isShellHidden = pathname === '/login' || pathname?.startsWith('/marketing') || pathname?.startsWith('/setup') || pathname?.startsWith('/activate');
+
     // Main app routes: Full layout with auth and header
     return (
         <AuthProvider>
             <GlobalActionProvider>
                 <ToastProvider>
-                    <KioskController />
-                    <Calculator />
-                    <GlobalHeader />
+                    {!isShellHidden && <KioskController />}
+                    {!isShellHidden && <Calculator />}
+                    {!isShellHidden && <GlobalHeader />}
                     {children}
                 </ToastProvider>
             </GlobalActionProvider>
