@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { checkPermission } from '@/app/api/auth/check-permission/route';
+import { getToken } from 'next-auth/jwt';
 
 // Protected API routes that require permission checks
 const protectedRoutes = [
@@ -54,11 +52,12 @@ export async function middleware(request: NextRequest) {
     }
 
     // 2. Auth Check - STRICT ENFORCEMENT
-    const session = await getServerSession(authOptions);
+    // Use getToken instead of getServerSession for Edge compatibility
+    const token = await getToken({ req: request });
 
     // If no session exists
-    if (!session) {
-        // Allow public paths (login, register, assets, etc.) to pass
+    if (!token) {
+        // Allow public paths (login, assets, etc.) to pass
         if (isPublicPath || pathname === '/login' || pathname === '/api/auth/signin') {
             return NextResponse.next();
         }
@@ -73,16 +72,35 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    // If session exists, prevent them from accessing /login or /setup/wizard implies they should be on dashboard
-    if (session && pathname === '/login') {
+    // If session exists, prevent them from accessing /login implies they should be on dashboard
+    if (token && pathname === '/login') {
         return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // 3. RBAC Check (Existing Logic)
-    if (session) {
+    // 3. RBAC Check (Edge Compatible Logic)
+    if (token) {
         const route = protectedRoutes.find(r => pathname.startsWith(r.path));
         if (route) {
-            const hasPermission = await checkPermission(session, route.resource, route.action);
+            // Simplified RBAC logic that runs on Edge (no DB calls)
+            // Replicates checkPermission logic using token claims
+            const role = token.role as string;
+            let hasPermission = false;
+
+            if (role === 'admin') {
+                hasPermission = true;
+            } else if (role === 'accountant') {
+                // Deny access to user management and system settings
+                // Allow everything else
+                if (route.resource !== 'users' && route.resource !== 'settings') {
+                    hasPermission = true;
+                }
+            } else if (role === 'viewer') {
+                // Viewer has read-only access (view/read)
+                if (route.action === 'read' || route.action === 'view') {
+                    hasPermission = true;
+                }
+            }
+
             if (!hasPermission) {
                 return NextResponse.json({ error: 'Forbidden - Insufficient permissions' }, { status: 403 });
             }
@@ -90,7 +108,6 @@ export async function middleware(request: NextRequest) {
     }
 
     // Prevent browser caching for all protected routes
-    // This fixes the "Back Button" security issue
     const response = NextResponse.next();
 
     if (!isPublicPath) {
@@ -104,7 +121,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
     matcher: [
-        // Only run middleware on these specific paths, excluding admin entirely
+        // Only run middleware on these specific paths, excluding admin entirely (handled by if check)
         '/',
         '/login',
         '/api/vouchers/:path*',

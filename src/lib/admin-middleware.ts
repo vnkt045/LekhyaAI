@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 
 /**
  * Admin-specific middleware
@@ -17,8 +16,7 @@ export async function adminMiddleware(request: NextRequest) {
     }
 
     // Check admin session for all other admin routes
-    const cookieStore = await cookies();
-    const adminSessionId = cookieStore.get('admin_session')?.value;
+    const adminSessionId = request.cookies.get('admin_session')?.value;
 
     if (!adminSessionId) {
         console.log('[ADMIN MIDDLEWARE] No session, redirecting to /admin/login');
