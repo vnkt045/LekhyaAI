@@ -194,6 +194,20 @@ async function main() {
 
     console.log(`✅ Created ${voucherTypes.length} default voucher types`);
 
+    // Create Dummy License
+    await prisma.license.upsert({
+        where: { key: 'LEKHYA-TEST-2024-KEY' },
+        update: {},
+        create: {
+            key: 'LEKHYA-TEST-2024-KEY',
+            clientName: 'Demo Client',
+            status: 'PENDING',
+            plan: 'ENTERPRISE'
+        }
+    });
+
+    console.log('🔑 Created Dummy License: LEKHYA-TEST-2024-KEY');
+
     console.log('🎉 Database seeded successfully!');
 }
 
