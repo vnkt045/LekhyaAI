@@ -35,7 +35,8 @@ export async function middleware(request: NextRequest) {
         return response;
     }
 
-    // 1. License Check (Bypass for assets, owner page, activate page, and auth)
+    // 1. License Check (REMOVED AS PER REQUEST)
+    /*
     const isPublicPath =
         pathname.startsWith('/_next') ||
         pathname.startsWith('/static') ||
@@ -50,6 +51,14 @@ export async function middleware(request: NextRequest) {
     if (!isPublicPath && !hasLicense) {
         return NextResponse.redirect(new URL('/activate', request.url));
     }
+    */
+
+    const isPublicPath =
+        pathname.startsWith('/_next') ||
+        pathname.startsWith('/static') ||
+        pathname.startsWith('/api/auth') ||
+        pathname.startsWith('/activate') ||
+        pathname.startsWith('/owner'); // Re-declare for subsequent logic usage if needed, or inline it.
 
     // 2. Auth Check - STRICT ENFORCEMENT
     // Use getToken instead of getServerSession for Edge compatibility
