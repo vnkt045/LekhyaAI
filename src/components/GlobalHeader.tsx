@@ -158,57 +158,7 @@ export default function GlobalHeader() {
 
                     <div className="h-10 w-px bg-white/30"></div>
 
-                    {/* Navigation Menu */}
-                    <div className="relative">
-                        <button
-                            onClick={() => setShowMenu(!showMenu)}
-                            className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-white/20 rounded-lg transition-colors bg-white/10 border-2 border-white/40"
-                        >
-                            <Menu className="w-5 h-5" color="white" strokeWidth={2.5} />
-                            <span className="text-sm font-bold tracking-wide">MENU</span>
-                        </button>
 
-                        {showMenu && (
-                            <>
-                                <div
-                                    className="fixed inset-0 z-[110]"
-                                    onClick={() => setShowMenu(false)}
-                                />
-                                <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-lg shadow-2xl border border-slate-200 z-[120] overflow-hidden max-h-[80vh] overflow-y-auto">
-                                    {menuItems.map((section, idx) => (
-                                        <div key={idx} className="border-b border-slate-100 last:border-0">
-                                            <div className="px-3 py-1.5 bg-slate-50 flex items-center gap-2">
-                                                <section.icon className="w-3.5 h-3.5 text-lekhya-primary" />
-                                                <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                                                    {section.category}
-                                                </span>
-                                            </div>
-                                            {section.items.map((item: any, itemIdx) => (
-                                                <Link
-                                                    key={itemIdx}
-                                                    href={item.href}
-                                                    onClick={(e) => {
-                                                        if (item.comingSoon) {
-                                                            e.preventDefault();
-                                                            return;
-                                                        }
-                                                        setShowMenu(false);
-                                                    }}
-                                                    className={`block px-3 py-2 text-xs transition-colors flex justify-between items-center ${item.comingSoon ? 'text-slate-400 cursor-not-allowed hover:bg-transparent' : 'text-slate-700 hover:bg-lekhya-primary hover:text-white'}`}
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        {item.icon && <item.icon className="w-3 h-3 opacity-60" />}
-                                                        <span>{item.label}</span>
-                                                    </div>
-                                                    {item.comingSoon && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">SOON</span>}
-                                                </Link>
-                                            ))}
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                    </div>
 
                     <div className="h-10 w-px bg-white/30"></div>
                     <span className="font-bold text-xl tracking-wide">LekhyaAI</span>

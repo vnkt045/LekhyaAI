@@ -97,9 +97,10 @@ export async function middleware(request: NextRequest) {
 
             if (role === 'admin') {
                 hasPermission = true;
-            } else if (role === 'accountant') {
+            } else if (role === 'accountant' || role === 'user') {
                 // Deny access to user management and system settings
                 // Allow everything else
+                // Treat default 'user' as 'accountant' for now to prevent easy blockers
                 if (route.resource !== 'users' && route.resource !== 'settings') {
                     hasPermission = true;
                 }
@@ -111,6 +112,8 @@ export async function middleware(request: NextRequest) {
             }
 
             if (!hasPermission) {
+                // Log for debugging
+                console.log(`[RBAC] Denied: Role=${role}, Resource=${route.resource}, Action=${route.action}`);
                 return NextResponse.json({ error: 'Forbidden - Insufficient permissions' }, { status: 403 });
             }
         }
