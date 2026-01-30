@@ -362,6 +362,8 @@ function AuthForm() {
                             </button>
                         </form>
 
+                        {/* Social Login - Removed as per request */}
+                        {/* 
                         <div className="mt-6">
                             <div className="relative">
                                 <div className="absolute inset-0 flex items-center">
@@ -397,6 +399,7 @@ function AuthForm() {
                                 </button>
                             </div>
                         </div>
+                        */}
                     </>
                 )}
             </div>
