@@ -16,6 +16,51 @@ export async function middleware(request: NextRequest) {
 
     console.log('[MIDDLEWARE] Processing path:', pathname);
 
+    // Multi-Tenant Routing: Extract tenant slug from /masters/:slug/* paths
+    const tenantMatch = pathname.match(/^\/masters\/([^\/]+)/);
+    if (tenantMatch) {
+        const tenantSlug = tenantMatch[1];
+
+        // Add tenant slug to request headers for downstream use
+        const requestHeaders = new Headers(request.headers);
+        requestHeaders.set('x-tenant-slug', tenantSlug);
+
+        console.log('[MIDDLEWARE] Tenant slug detected:', tenantSlug);
+
+        // Continue with tenant context
+        const response = NextResponse.next({
+            request: {
+                headers: requestHeaders
+            }
+        });
+
+        response.headers.set('x-tenant-slug', tenantSlug);
+        return response;
+    }
+
+    // Super Admin Route Protection
+    if (pathname.startsWith('/admin-super') || pathname.startsWith('/api/admin-super')) {
+        const token = await getToken({ req: request });
+
+        if (!token) {
+            if (pathname.startsWith('/api')) {
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            }
+            return NextResponse.redirect(new URL('/login', request.url));
+        }
+
+        // Only SUPER_ADMIN role can access
+        if (token.role !== 'SUPER_ADMIN') {
+            if (pathname.startsWith('/api')) {
+                return NextResponse.json({ error: 'Forbidden - Super Admin access required' }, { status: 403 });
+            }
+            return NextResponse.redirect(new URL('/', request.url));
+        }
+
+        // Allow super admin to proceed
+        return NextResponse.next();
+    }
+
     // Route to admin middleware for all admin routes
     if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
         console.log('[MIDDLEWARE] Routing to admin middleware');

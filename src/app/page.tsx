@@ -23,12 +23,8 @@ export default async function Home() {
 
     if (userCompany) {
       // User belongs to a company, but session is stale.
-      // We can redirect to a "Refreshing Session" page, or simply prompt login.
-      // For now, let's redirect to a special 'select-company' or force re-login.
-      // But simply redirecting to dashboard will loop.
-      // Let's redirect to setup/company with a query param to indicate "select default".
-      // Or better yet, redirect to /setup/company to "Create or Join".
-      redirect('/setup/company');
+      // Force logout and redirect to login to refresh session with companyId
+      redirect('/api/auth/signout?callbackUrl=/login');
     } else {
       // User has NO company.
       redirect('/setup/wizard');

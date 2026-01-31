@@ -85,6 +85,27 @@ export const authOptions: NextAuthOptions = {
                     const activeCo = defaultCo || user.companies[0];
                     companyId = activeCo.companyId;
                     companyName = activeCo.company.name;
+
+                    // Validate license before allowing login
+                    const company = await db.company.findUnique({
+                        where: { id: companyId },
+                        include: { licenseKey: true }
+                    });
+
+                    if (company?.licenseKey) {
+                        const license = company.licenseKey;
+
+                        // Block login if license is disabled
+                        if (license.status === 'DISABLED') {
+                            throw new Error('License disabled. Contact support.');
+                        }
+
+                        // Block login if license is expired
+                        if (license.status === 'EXPIRED' ||
+                            (license.expiryDate && new Date(license.expiryDate) < new Date())) {
+                            throw new Error('License expired. Please renew.');
+                        }
+                    }
                 }
 
                 return {

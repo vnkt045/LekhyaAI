@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -18,10 +18,11 @@ model User {
   name     String
   email    String @unique
   password String // Hashed
-  role     String @default("user") // admin, accountant, viewer
+  role     String @default("user") // admin, accountant, viewer, SUPER_ADMIN
 
-  timesheets Timesheet[]
-  companies  UserCompany[]
+  timesheets      Timesheet[]
+  companies       UserCompany[]
+  loginActivities LoginActivity[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -254,6 +255,7 @@ model SalarySlipEntry {
 model Company {
   id                 String   @id @default(cuid())
   name               String
+  slug               String?  @unique // Tenant URL slug (e.g., "abc-company")
   gstin              String?
   pan                String?
   address            String
@@ -275,6 +277,7 @@ model Company {
   updatedAt DateTime @updatedAt
 
   subscription Subscription?
+  licenseKey   LicenseKey?
 
   // Relations to scoped entities
   users           UserCompany[]
@@ -1770,4 +1773,56 @@ model PortalUser {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// SUPER ADMIN: LICENSE & ACTIVITY TRACKING
+// ============================================
+
+model LicenseKey {
+  id            String   @id @default(cuid())
+  key           String   @unique // Generated license key (LKHYA-XXXX-XXXX-XXXX)
+  
+  // Link to Company (Tenant)
+  companyId     String?  @unique
+  company       Company? @relation(fields: [companyId], references: [id])
+  
+  // Customer Info
+  customerName  String
+  customerEmail String
+  
+  // Status Management
+  status        String   @default("ACTIVE") // ACTIVE, DISABLED, EXPIRED
+  paymentStatus String   @default("PAID") // PAID, OVERDUE, FAILED
+  
+  // Dates
+  issuedDate    DateTime @default(now())
+  expiryDate    DateTime?
+  lastUsed      DateTime?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([status])
+  @@index([paymentStatus])
+}
+
+model LoginActivity {
+  id        String   @id @default(cuid())
+  
+  // User Info
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Company Context
+  companyId String?
+  
+  // Activity Details
+  loginTime DateTime @default(now())
+  ipAddress String
+  userAgent String
+  
+  @@index([userId])
+  @@index([loginTime])
+  @@index([companyId])
 }

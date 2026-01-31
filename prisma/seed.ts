@@ -23,6 +23,24 @@ async function main() {
 
     console.log('✅ Created/Updated user:', user.email);
 
+    // Create Super Admin User
+    const superAdminPassword = await bcrypt.hash('SuperAdmin@2026', 10);
+    const superAdmin = await prisma.user.upsert({
+        where: { email: 'superadmin@lekhyaai.com' },
+        update: {
+            password: superAdminPassword,
+            role: 'SUPER_ADMIN'
+        },
+        create: {
+            email: 'superadmin@lekhyaai.com',
+            password: superAdminPassword,
+            name: 'Super Administrator',
+            role: 'SUPER_ADMIN'
+        }
+    });
+
+    console.log('✅ Created/Updated super admin:', superAdmin.email);
+
     // Calculate Financial Year Dynamically
     const today = new Date();
     const currentMonth = today.getMonth(); // 0-11
