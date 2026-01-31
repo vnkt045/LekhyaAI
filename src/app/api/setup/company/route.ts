@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-    const session = await getServerSession(authOptions);
+    const session: any = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     try {
@@ -44,33 +44,49 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Company already exists. Use PUT to update.' }, { status: 400 });
         }
 
-        const company = await db.company.create({
-            data: {
-                name: body.name,
-                gstin: body.gstin,
-                pan: body.pan,
-                address: body.address,
-                city: body.city,
-                state: body.state,
-                pincode: body.pincode,
-                email: body.email,
-                phone: body.phone,
-                financialYearStart: new Date(body.financialYearStart),
-                financialYearEnd: new Date(body.financialYearEnd),
-                // Create default subscription
-                subscription: {
-                    create: {
-                        status: 'ACTIVE',
-                        planId: 'FREE',
-                        startDate: new Date(),
-                        endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 10)), // 10 years free
-                        allowedFeatures: '["all"]'
+        // Use transaction to ensure both company and user-company link are created atomically
+        const result = await db.$transaction(async (tx) => {
+            // Create company with subscription
+            const company = await tx.company.create({
+                data: {
+                    name: body.name,
+                    gstin: body.gstin,
+                    pan: body.pan,
+                    address: body.address,
+                    city: body.city,
+                    state: body.state,
+                    pincode: body.pincode,
+                    email: body.email,
+                    phone: body.phone,
+                    financialYearStart: new Date(body.financialYearStart),
+                    financialYearEnd: new Date(body.financialYearEnd),
+                    // Create default subscription
+                    subscription: {
+                        create: {
+                            status: 'ACTIVE',
+                            planId: 'FREE',
+                            startDate: new Date(),
+                            endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 10)), // 10 years free
+                            allowedFeatures: '["all"]'
+                        }
                     }
                 }
-            }
+            });
+
+            // CRITICAL FIX: Link the user to the company via UserCompany table
+            // This ensures the user's session will have companyId after re-login
+            await tx.userCompany.create({
+                data: {
+                    userId: session.user.id,
+                    companyId: company.id,
+                    role: 'admin'
+                }
+            });
+
+            return company;
         });
 
-        return NextResponse.json(company);
+        return NextResponse.json(result);
     } catch (error) {
         console.error('Create Company Error:', error);
         return NextResponse.json({ error: 'Failed to create company' }, { status: 500 });
@@ -114,4 +130,3 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: 'Failed to update company' }, { status: 500 });
     }
 }
-
