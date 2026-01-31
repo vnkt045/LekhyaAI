@@ -1,11 +1,7 @@
 'use client';
 
 import {
-    Home, AlertCircle, Save, X, Menu, Search, LogOut, User, ChevronDown,
-    // Category Icons
-    FileText, Receipt, BarChart3, Settings, Landmark,
-    // Item Icons
-    List, BookOpen, PlusCircle, Files, PlusSquare, Scale, TrendingUp, Package, Building2, Users, CreditCard, Upload
+    Home, AlertCircle, Save, X, Search, LogOut, User, ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -19,7 +15,6 @@ export default function GlobalHeader() {
     const { data: session } = useSession();
     const [showModal, setShowModal] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [showMenu, setShowMenu] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -47,55 +42,6 @@ export default function GlobalHeader() {
         e.preventDefault();
         router.push('/');
     };
-
-    const menuItems = [
-        {
-            category: 'Masters',
-            icon: FileText,
-            items: [
-                { label: 'Chart of Accounts', href: '/masters/accounts-info', icon: List },
-                { label: 'Ledger', href: '/masters/ledger', icon: BookOpen },
-                { label: 'Create Ledger', href: '/masters/ledger/create', icon: PlusCircle },
-            ]
-        },
-        {
-            category: 'Vouchers',
-            icon: Receipt,
-            items: [
-                { label: 'All Vouchers', href: '/vouchers', icon: Files },
-                { label: 'New Voucher', href: '/vouchers/new', icon: PlusSquare },
-                { label: 'Day Book', href: '/daybook', icon: BookOpen },
-            ]
-        },
-        {
-            category: 'Reports',
-            icon: BarChart3,
-            items: [
-                { label: 'GST Reports', href: '/gst', icon: FileText },
-                { label: 'Trial Balance', href: '/reports/trial-balance', icon: Scale },
-                { label: 'Balance Sheet', href: '/reports/balance-sheet', icon: Landmark },
-                { label: 'Profit & Loss', href: '/reports/profit-loss', icon: TrendingUp },
-                { label: 'Stock Summary', href: '/reports/stock-summary', icon: Package },
-                { label: 'Ratio Analysis', href: '/reports/ratio-analysis', icon: BarChart3 },
-            ]
-        },
-        {
-            category: 'Setup',
-            icon: Settings,
-            items: [
-                { label: 'Company Profile', href: '/setup/company', icon: Building2 },
-                { label: 'User Management', href: '/admin/users', icon: Users },
-                { label: 'System Configuration', href: '/settings', icon: Settings },
-            ]
-        },
-        {
-            category: 'Banking',
-            icon: Landmark,
-            items: [
-                { label: 'Banking Module', href: '/banking', icon: CreditCard },
-            ]
-        },
-    ];
 
     const formatTime = (date: Date) => {
         return date.toLocaleTimeString('en-IN', {

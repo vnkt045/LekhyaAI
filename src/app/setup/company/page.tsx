@@ -64,7 +64,12 @@ function CompanySetupContent() {
             }
 
             // Redirect after successful save
-            router.push('/');
+            // Force re-login to refresh session with new companyId
+            if (isCreateMode) {
+                router.push('/login?company=created');
+            } else {
+                router.push('/');
+            }
         } catch (error) {
             console.error(error);
             alert('Failed to save company profile');
